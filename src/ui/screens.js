@@ -4,7 +4,7 @@ import { STR } from '../content/strings.js';
 
 export function MainMenuScreen({ onPlay, onHelp, onSettings }) {
   return el('div', { class: 'menu' },
-    el('img', { class: 'menu__logo', src: 'assets/ui/logo.png', alt: 'Html', draggable: 'false' }),
+    el('div', { class: 'menu__logo', role: 'img', 'aria-label': 'Html' }),
     el('nav', { class: 'menu__nav' },
       Button({ label: STR.menu.play, onClick: onPlay }),
       Button({ label: STR.menu.help, onClick: onHelp }),

@@ -12,11 +12,13 @@
   --cut: 16px;
   --img-button: url('../../assets/ui/button.png');
   --img-menu-bg: url('../../assets/ui/menu-bg.jpg');
+  --img-logo: url('../../assets/ui/logo.png');
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: var(--c-text); font-family: var(--font); user-select: none; -webkit-user-select: none; }
 #app { position: fixed; inset: 0; }
+img { -webkit-user-drag: none; user-drag: none; }
 #game-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
 /* ---------- screen layer ---------- */
@@ -45,7 +47,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color:
 
 /* ---------- menus ---------- */
 .menu { display: flex; flex-direction: column; align-items: center; gap: var(--s5); }
-.menu__logo { width: min(620px, 80vw); filter: drop-shadow(0 6px 18px rgba(0,0,0,.6)); pointer-events: none; }
+.menu__logo { width: min(620px, 80vw); aspect-ratio: 1000 / 391; background: var(--img-logo) center / contain no-repeat; filter: drop-shadow(0 6px 18px rgba(0,0,0,.6)); pointer-events: none; }
 .menu__nav { display: flex; flex-direction: column; align-items: center; gap: var(--s2); }
 .dialog { display: flex; flex-direction: column; align-items: center; gap: var(--s3); width: 100%; }
 .dialog__panel { width: min(760px, 90vw); max-height: 68vh; }
