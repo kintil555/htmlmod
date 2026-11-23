@@ -14,7 +14,7 @@ Use desktop Chrome/Edge/Firefox. Pointer lock requires a click on Play.
 WASD move, Shift sprint, Space jump, mouse look, hold/tap Q spawn menu, R remove aimed object, Esc pause.
 
 ## Tuning
-Player speed is in `src/config.js` (walk 10, sprint 15). Nextbot speed/turning/slide are per bot in `src/content/nextbots.js`.
+Player speed is in `src/config.js` (walk 14, sprint 21, jump 14.5). Nextbot jump/AI tunables are in `CONFIG.nextbot`. Nextbot speed/turning/slide are per bot in `src/content/nextbots.js`.
 
 ## Extending
 See `docs/AGENTS.md`.

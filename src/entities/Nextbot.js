@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Entity } from './Entity.js';
-import { stepChaser, newChaserState } from './steering.js';
+import { stepChaser, newChaserState, leadPoint, planObstacle } from './steering.js';
 import { CONFIG } from '../config.js';
 
 const PLANE = new THREE.PlaneGeometry(1, 1);
@@ -33,6 +33,11 @@ export class Nextbot extends Entity {
     this.params = { speed: def.speed, turnRate: def.turnRate, grip: def.grip };
     this.s = newChaserState(x, z, face.x, face.z);
     this.phase = Math.random() * 6;
+    this.y = 0;
+    this.vy = 0;
+    this.onGround = true;
+    this.jumpCd = 0;
+    this.stuckT = 0;
 
     this.mesh = new THREE.Mesh(PLANE, materialFor(def, texture));
     this.mesh.scale.set(width, def.height, 1);
@@ -42,6 +47,7 @@ export class Nextbot extends Entity {
     const shadow = new THREE.Mesh(SHADOW_GEO, SHADOW_MAT);
     shadow.scale.setScalar(this.radius * 1.4);
     shadow.position.y = 0.03;
+    this.shadow = shadow;
     this.object3d.add(shadow, this.mesh);
     this.object3d.position.set(x, 0, z);
   }
@@ -50,7 +56,32 @@ export class Nextbot extends Entity {
   touches(player) {
     const dx = player.pos.x - this.s.x; const dz = player.pos.z - this.s.z;
     const r = this.radius + player.radius + 0.2;
-    return dx * dx + dz * dz < r * r && player.pos.y < this.height * 0.7;
+    return dx * dx + dz * dz < r * r && player.pos.y < this.y + this.height * 0.7 && player.pos.y > this.y - CONFIG.nextbot.catchBelow;
+  }
+
+  /** Starts a jump if grounded and off cooldown. */
+  _jump() {
+    const n = CONFIG.nextbot;
+    if (!this.onGround || this.jumpCd > 0) return false;
+    this.vy = n.jumpSpeed; this.onGround = false; this.jumpCd = n.jumpCooldown;
+    return true;
+  }
+
+  /** Look ahead for walls: jump what is clearable, steer around what is not, hop when stuck. */
+  _navigate(dt, distToTarget) {
+    const n = CONFIG.nextbot; const s = this.s;
+    const sp = Math.hypot(s.vx, s.vz);
+    const dx = sp > 1 ? s.vx / sp : Math.sin(s.heading);
+    const dz = sp > 1 ? s.vz / sp : Math.cos(s.heading);
+    const reach = Math.max(n.lookAheadMin, sp * n.lookAheadTime) + this.radius;
+    const blk = this.world.collision.sweepBlocker(s.x, s.z, dx, dz, reach, this.radius, this.y);
+    const plan = planObstacle(blk, this.y, Math.max(sp, 1), n.jumpSpeed, n.gravity, this.radius, n);
+    if (plan === 'jump') this._jump();
+    else if (plan === 'avoid') { s.avx = -dx; s.avz = -dz; s.avoidT = n.avoidTime; }
+
+    if (this.onGround && distToTarget > 3 && sp < this.params.speed * n.stuckSpeedFrac) this.stuckT += dt;
+    else this.stuckT = 0;
+    if (this.stuckT > n.stuckTime) { this._jump(); this.stuckT = 0; }
   }
 
   update(dt, ctx) {
@@ -61,9 +92,13 @@ export class Nextbot extends Entity {
       s.vx *= k; s.vz *= k;
       s.x += s.vx * dt; s.z += s.vz * dt;
     } else {
-      stepChaser(s, player.pos.x, player.pos.z, dt, this.params);
+      const n = CONFIG.nextbot;
+      const aim = leadPoint(s, player.pos.x, player.pos.z, player.vel.x, player.vel.z, this.params.speed, n.leadFactor, n.leadMax);
+      this._navigate(dt, Math.hypot(player.pos.x - s.x, player.pos.z - s.z));
+      stepChaser(s, aim.x, aim.z, dt, this.params);
     }
-    const hit = this.world.collision.resolveCircle(s, this.radius, 0);
+    if (this.jumpCd > 0) this.jumpCd -= dt;
+    const hit = this.world.collision.resolveCircle(s, this.radius, this.y);
     if (hit) {
       const vd = s.vx * hit.nx + s.vz * hit.nz;
       if (vd < 0) { s.vx -= vd * hit.nx; s.vz -= vd * hit.nz; }
@@ -73,10 +108,18 @@ export class Nextbot extends Entity {
     s.x = Math.max(-lim, Math.min(lim, s.x));
     s.z = Math.max(-lim, Math.min(lim, s.z));
 
-    this.object3d.position.set(s.x, 0, s.z);
+    const gv = CONFIG.nextbot;
+    const prevY = this.y;
+    this.vy -= gv.gravity * dt;
+    this.y += this.vy * dt;
+    const ground = this.world.collision.groundHeight(s.x, s.z, this.radius, prevY);
+    if (this.y <= ground && this.vy <= 0) { this.y = ground; this.vy = 0; this.onGround = true; } else this.onGround = false;
+    this.shadow.position.y = ground - this.y + 0.03;
+
+    this.object3d.position.set(s.x, this.y, s.z);
     const speed = Math.hypot(s.vx, s.vz);
     this.phase += speed * dt * 0.9;
-    this.mesh.position.y = Math.abs(Math.sin(this.phase)) * 0.12 * Math.min(1, speed / 6);
+    this.mesh.position.y = this.onGround ? Math.abs(Math.sin(this.phase)) * 0.12 * Math.min(1, speed / 6) : 0;
     this.mesh.rotation.y = Math.atan2(camera.position.x - s.x, camera.position.z - s.z);
   }
 }

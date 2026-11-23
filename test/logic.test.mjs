@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { stepChaser, newChaserState } from '../src/entities/steering.js';
+import { stepChaser, newChaserState, riseTime, leadPoint, planObstacle } from '../src/entities/steering.js';
 import { Collision } from '../src/world/Collision.js';
 
 const CATCH = 1.7; // upper bound of catch distance (bot radius 1.1 + player 0.4 + 0.2)
@@ -16,23 +16,23 @@ function dodge(params, cutDist, speed) {
   }
   return cut ? min : Infinity;
 }
-const obunga = { speed: 10.5, turnRate: 2.6, grip: 3.0 };
-const superMunci = { speed: 12, turnRate: 2.2, grip: 2.2 };
+const obunga = { speed: 14.7, turnRate: 2.6, grip: 3.0 };
+const superMunci = { speed: 16.8, turnRate: 2.2, grip: 2.2 };
 
-assert.ok(dodge(obunga, 3, 15) > CATCH, 'sprint-cut at 3 units dodges Obunga');
-assert.ok(dodge(obunga, 3, 10) > CATCH, 'walk-cut at 3 units dodges Obunga');
-assert.ok(dodge(superMunci, 3, 10) < CATCH, 'walking cannot escape the fastest bot');
-assert.ok(dodge(superMunci, 3, 15) > CATCH, 'sprinting escapes the fastest bot');
+assert.ok(dodge(obunga, 3, 21) > CATCH, 'sprint-cut at 3 units dodges Obunga');
+assert.ok(dodge(obunga, 3, 14) > CATCH, 'walk-cut at 3 units dodges Obunga');
+assert.ok(dodge(superMunci, 3, 14) < CATCH, 'walking cannot escape the fastest bot');
+assert.ok(dodge(superMunci, 3, 21) > CATCH, 'sprinting escapes the fastest bot');
 
 // Bot is not an instant-turn homing missile: it still carries forward velocity right after a 90 degree cut.
-const b = newChaserState(0, 0, 0, 40); b.vz = 10.5;
+const b = newChaserState(0, 0, 0, 40); b.vz = 14.7;
 let qx = 0;
-for (let i = 0; i < 20; i++) { qx += 15 / 60; stepChaser(b, qx, 6, 1 / 60, obunga); }
+for (let i = 0; i < 20; i++) { qx += 21 / 60; stepChaser(b, qx, 6, 1 / 60, obunga); }
 assert.ok(b.vz > 3, 'slides forward after cut, vz=' + b.vz);
 
 // Steady chase: a sprinting player keeps the gap.
 const chaser = newChaserState(0, 0, 0, 30); let z = 30;
-for (let i = 0; i < 1200; i++) { z += 15 / 60; stepChaser(chaser, 0, z, 1 / 60, superMunci); }
+for (let i = 0; i < 1200; i++) { z += 21 / 60; stepChaser(chaser, 0, z, 1 / 60, superMunci); }
 assert.ok(z - chaser.z > 20, 'sprinter keeps gap');
 
 // Collision.
@@ -47,4 +47,41 @@ assert.ok(Math.abs(inside.x) >= 1.5 || Math.abs(inside.z) >= 1.5, 'inside center
 assert.equal(c.groundHeight(0, 0, 0.4, 3), 3);
 assert.equal(c.groundHeight(0, 0, 0.4, 0), 0, 'cannot step onto a 3m box from the ground');
 assert.equal(c.resolveCircle({ x: 0, z: 0 }, 0.4, 3), null, 'standing on top: no horizontal push');
+// Jump AI.
+const N = { clearance: 0.6, jumpMargin: 1.2 };
+assert.ok(Math.abs(riseTime(26, 30, 0)) < 1e-9, 'rise time to 0 is 0');
+assert.equal(riseTime(26, 30, 12), null, 'apex 11.3 cannot reach 12');
+assert.ok(riseTime(26, 30, 5) > 0, 'reachable height has rise time');
+const wall = new Collision();
+wall.add({ minX: -5, maxX: 5, minZ: 10, maxZ: 12, top: 6 });
+const blk = wall.sweepBlocker(0, 0, 0, 1, 20, 0.5, 0);
+assert.ok(blk && Math.abs(blk.dist - 9.5) < 1e-6, 'sweep hits wall face minus radius, dist=' + (blk && blk.dist));
+assert.equal(wall.sweepBlocker(0, 0, 1, 0, 20, 0.5, 0), null, 'sweep parallel to wall misses');
+assert.equal(wall.sweepBlocker(0, 0, 0, 1, 20, 0.5, 6), null, 'wall below feet is not a blocker');
+assert.equal(planObstacle(null, 0, 15, 26, 30, 1, N), 'none');
+assert.equal(planObstacle({ box: { top: 20 }, dist: 3 }, 0, 15, 26, 30, 1, N), 'avoid', 'too tall: go around');
+assert.equal(planObstacle({ box: { top: 6 }, dist: 40 }, 0, 15, 26, 30, 1, N), 'wait', 'far: do not jump yet');
+assert.equal(planObstacle({ box: { top: 6 }, dist: 2 }, 0, 15, 26, 30, 1, N), 'jump', 'close: jump');
+
+// Full jump simulation: a bot running at a 6-high wall clears it using the plan.
+{
+  const g = 30; const vy0 = 26; const sim = new Collision();
+  sim.add({ minX: -5, maxX: 5, minZ: 20, maxZ: 22, top: 6 });
+  const bot = newChaserState(0, 0, 0, 60); let y = 0; let vy = 0; let ground = true; let crossed = false;
+  for (let i = 0; i < 600; i++) {
+    const dt = 1 / 60; const sp = Math.hypot(bot.vx, bot.vz);
+    const bl = sim.sweepBlocker(bot.x, bot.z, 0, 1, Math.max(3, sp * 0.9) + 0.8, 0.8, y);
+    if (ground && planObstacle(bl, y, Math.max(sp, 1), vy0, g, 0.8, N) === 'jump') { vy = vy0; ground = false; }
+    stepChaser(bot, 0, 60, dt, superMunci);
+    sim.resolveCircle(bot, 0.8, y);
+    const prev = y; vy -= g * dt; y += vy * dt;
+    const gh = sim.groundHeight(bot.x, bot.z, 0.8, prev);
+    if (y <= gh && vy <= 0) { y = gh; vy = 0; ground = true; } else ground = false;
+    if (bot.z > 24) { crossed = true; break; }
+  }
+  assert.ok(crossed, 'bot jumps over a 6-high wall');
+}
+const lp = leadPoint({ x: 0, z: 0 }, 0, 20, 10, 0, 20, 0.6, 1.2);
+assert.ok(lp.x > 0 && lp.z === 20, 'lead aims ahead of a moving target');
+
 console.log('all logic tests passed');

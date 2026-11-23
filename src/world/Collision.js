@@ -55,4 +55,27 @@ export class Collision {
     }
     return g;
   }
+
+  /**
+   * Swept circle (radius r) from (x,z) along unit dir (dx,dz) up to `dist`.
+   * Returns {box, dist} for the nearest box taller than feetY + STEP_HEIGHT, or null.
+   */
+  sweepBlocker(x, z, dx, dz, dist, r, feetY = 0) {
+    let best = null;
+    for (const b of this.boxes) {
+      if (b.top <= feetY + STEP_HEIGHT) continue;
+      let t0 = 0; let t1 = dist;
+      const axes = [[x, dx, b.minX - r, b.maxX + r], [z, dz, b.minZ - r, b.maxZ + r]];
+      let ok = true;
+      for (const [o, d, lo, hi] of axes) {
+        if (Math.abs(d) < 1e-9) { if (o < lo || o > hi) { ok = false; break; } continue; }
+        let a = (lo - o) / d; let c = (hi - o) / d;
+        if (a > c) { const tmp = a; a = c; c = tmp; }
+        t0 = Math.max(t0, a); t1 = Math.min(t1, c);
+        if (t0 > t1) { ok = false; break; }
+      }
+      if (ok && (!best || t0 < best.dist)) best = { box: b, dist: t0 };
+    }
+    return best;
+  }
 }

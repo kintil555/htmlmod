@@ -43,3 +43,28 @@ export function stepChaser(s, tx, tz, dt, p) {
 export function newChaserState(x, z, faceX, faceZ) {
   return { x, z, vx: 0, vz: 0, heading: Math.atan2(faceX - x, faceZ - z), avx: 0, avz: 0, avoidT: 0 };
 }
+
+/** Time to rise `h` units with launch speed vy under gravity g; null if the apex is lower than h. */
+export function riseTime(vy, g, h) {
+  const disc = vy * vy - 2 * g * h;
+  if (disc < 0) return null;
+  return (vy - Math.sqrt(disc)) / g;
+}
+
+/** Where to aim: the target's position extrapolated along its velocity (pursuit, not tail-chasing). */
+export function leadPoint(s, tx, tz, tvx, tvz, speed, factor, maxT) {
+  const dist = Math.hypot(tx - s.x, tz - s.z);
+  const t = Math.min(maxT, dist / Math.max(speed, 1)) * factor;
+  return { x: tx + tvx * t, z: tz + tvz * t };
+}
+
+/**
+ * Decide what to do about a blocker ahead. Returns 'jump' (start the jump now),
+ * 'wait' (clearable, but too early), 'avoid' (too tall: go around) or 'none'.
+ */
+export function planObstacle(blocker, feetY, speed, jumpSpeed, gravity, radius, n) {
+  if (!blocker) return 'none';
+  const tRise = riseTime(jumpSpeed, gravity, blocker.box.top - feetY + n.clearance);
+  if (tRise === null) return 'avoid';
+  return blocker.dist <= speed * tRise + radius + n.jumpMargin ? 'jump' : 'wait';
+}
