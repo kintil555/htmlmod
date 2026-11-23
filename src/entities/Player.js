@@ -17,10 +17,12 @@ export class Player {
     this.invulnerable = 0;
     this.spaceWas = false;
     this.wallCd = 0;
+    this.rag = null;
     this.respawn();
   }
 
   respawn() {
+    this.rag = null;
     const s = CONFIG.player.spawn;
     this.pos.set(s.x, 0, s.z);
     this.vel.set(0, 0, 0);
@@ -33,9 +35,88 @@ export class Player {
 
   get speed() { return Math.hypot(this.vel.x, this.vel.z); }
 
+  /** Freeze the player and turn the camera into a tumbling head, thrown away from (fromX, fromZ). */
+  die(fromX, fromZ) {
+    const r = CONFIG.ragdoll;
+    this.frozen = true;
+    let dx = this.pos.x - fromX; let dz = this.pos.z - fromZ;
+    const l = Math.hypot(dx, dz);
+    if (l > 1e-6) { dx /= l; dz /= l; } else { dx = Math.sin(this.yaw); dz = Math.cos(this.yaw); }
+    const side = Math.random() < 0.5 ? -1 : 1;
+    this.rag = {
+      pos: new THREE.Vector3(this.pos.x, this.pos.y + CONFIG.player.eyeHeight, this.pos.z),
+      vel: new THREE.Vector3(this.vel.x + dx * r.knockback, this.vel.y + r.pop, this.vel.z + dz * r.knockback),
+      pitch: this.pitch,
+      yaw: this.yaw,
+      roll: 0,
+      wPitch: -r.spinPitch * (0.6 + Math.random() * 0.8),
+      wYaw: side * r.spinYaw * (0.5 + Math.random()),
+      wRoll: side * r.spinRoll * (0.7 + Math.random() * 0.6),
+      grounded: false,
+    };
+  }
+
+  /** Free-flying head: gravity, wall and floor collision, bounce, spin that damps out and settles on its side. */
+  _updateRagdoll(dt, world) {
+    const r = CONFIG.ragdoll; const g = this.rag;
+    const hr = r.headRadius;
+    const drag = Math.exp(-r.airDrag * dt);
+    g.vel.x *= drag; g.vel.z *= drag;
+    g.vel.y -= r.gravity * dt;
+    g.pos.x += g.vel.x * dt;
+    g.pos.z += g.vel.z * dt;
+    const feet = g.pos.y - hr;
+    const hit = world.collision.resolveCircle(g.pos, hr, feet);
+    if (hit) {
+      const vd = g.vel.x * hit.nx + g.vel.z * hit.nz;
+      if (vd < 0) { g.vel.x -= (1 + r.restitution) * vd * hit.nx; g.vel.z -= (1 + r.restitution) * vd * hit.nz; }
+    }
+    const lim = CONFIG.world.halfSize - 1;
+    g.pos.x = Math.max(-lim, Math.min(lim, g.pos.x));
+    g.pos.z = Math.max(-lim, Math.min(lim, g.pos.z));
+
+    const prevY = g.pos.y;
+    g.pos.y += g.vel.y * dt;
+    const floor = world.collision.groundHeight(g.pos.x, g.pos.z, hr, prevY - hr) + hr;
+    g.grounded = false;
+    if (g.pos.y <= floor && g.vel.y <= 0) {
+      g.pos.y = floor;
+      if (-g.vel.y > r.restSpeed) {
+        g.vel.y = -g.vel.y * r.restitution;
+        g.wPitch *= r.bounceSpinKeep; g.wYaw *= r.bounceSpinKeep; g.wRoll *= r.bounceSpinKeep;
+      } else {
+        g.vel.y = 0;
+        g.grounded = true;
+      }
+    }
+
+    g.pitch += g.wPitch * dt;
+    g.yaw += g.wYaw * dt;
+    g.roll += g.wRoll * dt;
+
+    if (g.grounded) {
+      const fr = Math.exp(-r.groundFriction * dt);
+      g.vel.x *= fr; g.vel.z *= fr;
+      const sd = Math.exp(-r.groundSpinDamp * dt);
+      g.wPitch *= sd; g.wYaw *= sd; g.wRoll *= sd;
+      if (Math.hypot(g.wPitch, g.wRoll, g.wYaw) < 1.5) {
+        // Lying still: ease to a stable side-on view (roll to nearest quarter turn, pitch level).
+        const k = Math.min(1, dt * r.settleRate);
+        const half = Math.PI / 2;
+        g.roll += (Math.round(g.roll / half) * half - g.roll) * k;
+        g.pitch += (Math.round(g.pitch / Math.PI) * Math.PI - g.pitch) * k;
+        g.wPitch = 0; g.wRoll = 0; g.wYaw = 0;
+      }
+    }
+
+    this.camera.position.copy(g.pos);
+    this.camera.rotation.set(g.pitch, g.yaw, g.roll);
+  }
+
   update(dt, input, world) {
     const c = CONFIG.player;
     const look = input.consumeLook();
+    if (this.rag) { this._updateRagdoll(dt, world); return; }
     if (!this.frozen) {
       this.yaw -= look.dx * c.lookSensitivity;
       this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch - look.dy * c.lookSensitivity));

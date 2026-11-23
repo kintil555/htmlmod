@@ -276,7 +276,7 @@ export class Game {
   _onCaught(bot) {
     this.stats.caught++;
     this.stats.survived = 0;
-    this.player.frozen = true;
+    this.player.die(bot.s.x, bot.s.z);
     this.respawnTimer = CONFIG.catchState.respawnDelay;
     this.hud.showCaught(bot.displayName);
     this._refreshHud();

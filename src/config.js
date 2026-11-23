@@ -41,5 +41,22 @@ export const CONFIG = {
   },
   limits: { maxNextbots: 30, maxProps: 80 },
   catchState: { respawnDelay: 1.6, invulnerable: 2.0, pushRadius: 14 },
+  /** Camera ragdoll on catch: the head is thrown away from the bot, tumbles, bounces and settles on its side. */
+  ragdoll: {
+    headRadius: 0.25,
+    knockback: 9,
+    pop: 6,
+    gravity: 32,
+    restitution: 0.38,
+    groundFriction: 6,
+    airDrag: 0.4,
+    spinRoll: 9,
+    spinPitch: 5,
+    spinYaw: 4,
+    bounceSpinKeep: 0.6,
+    groundSpinDamp: 3.5,
+    restSpeed: 1.2,
+    settleRate: 5,
+  },
   spawnMenu: { stickyMs: 250, closeGraceMs: 800 },
 };
