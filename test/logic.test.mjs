@@ -98,3 +98,12 @@ assert.equal(planObstacle({ box: { top: 20 }, dist: 1 }, 0, 15, 26, 30, 1, NC, f
 assert.equal(planObstacle({ box: { top: 20 }, dist: 9 }, 0, 15, 26, 30, 1, NC, true), 'avoid', 'too far to climb yet');
 
 console.log('all logic tests passed');
+
+// Wall contact (wall jump probe).
+const wc = new Collision();
+wc.add({ minX: -5, maxX: 5, minZ: 0, maxZ: 1, top: 10 });
+const near = wc.wallContact(0, -0.6, 0.4, 0.35, 2);
+assert.ok(near && near.nz === -1 && near.nx === 0, 'wall within reach, normal points away');
+assert.equal(wc.wallContact(0, -2, 0.4, 0.35, 2), null, 'too far: no contact');
+assert.equal(wc.wallContact(0, -0.6, 0.4, 0.35, 10), null, 'above the wall top: no contact');
+console.log('wall tests passed');

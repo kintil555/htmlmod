@@ -12,6 +12,7 @@ export const CONFIG = {
     lookSensitivity: 0.0022,
     fov: 75,
     sprintFov: 82,
+    wallJump: { reach: 0.35, cooldown: 0.18, upSpeed: 15.5, kickSpeed: 19, minAway: 7, climbAway: 1.5 },
     spawn: { x: 0, z: 14, yaw: 0 },
   },
   nextbot: {

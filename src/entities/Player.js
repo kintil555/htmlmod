@@ -15,6 +15,8 @@ export class Player {
     this.sprinting = false;
     this.frozen = false;
     this.invulnerable = 0;
+    this.spaceWas = false;
+    this.wallCd = 0;
     this.respawn();
   }
 
@@ -39,6 +41,10 @@ export class Player {
       this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch - look.dy * c.lookSensitivity));
     }
     if (this.invulnerable > 0) this.invulnerable -= dt;
+    if (this.wallCd > 0) this.wallCd -= dt;
+    const space = !this.frozen && input.isDown('Space');
+    const spacePressed = space && !this.spaceWas;
+    this.spaceWas = space;
 
     let fwd = 0; let strafe = 0;
     if (!this.frozen) {
@@ -60,7 +66,8 @@ export class Player {
     if (al > acc) { ax *= acc / al; az *= acc / al; }
     this.vel.x += ax; this.vel.z += az;
 
-    if (!this.frozen && this.onGround && input.isDown('Space')) { this.vel.y = c.jumpSpeed; this.onGround = false; }
+    if (space && this.onGround) { this.vel.y = c.jumpSpeed; this.onGround = false; }
+    else if (spacePressed && !this.onGround && this.wallCd <= 0) this._wallJump(world, wx, wz, wl > 0, sin, cos);
 
     // Horizontal move + collide.
     this.pos.x += this.vel.x * dt;
@@ -89,6 +96,31 @@ export class Player {
     const nf = this.camera.fov + (fov - this.camera.fov) * Math.min(1, dt * 8);
     if (Math.abs(nf - this.camera.fov) > 0.01) { this.camera.fov = nf; this.camera.updateProjectionMatrix(); }
     this.syncCamera();
+  }
+
+  /**
+   * Wall jump: while airborne next to a wall, a fresh Space press kicks upward.
+   * Aim = move keys (or look direction when none). Aiming away/sideways launches that way;
+   * aiming into the wall only nudges off it, so repeated presses climb the same wall.
+   */
+  _wallJump(world, wx, wz, hasInput, sin, cos) {
+    const w = CONFIG.player.wallJump;
+    const n = world.collision.wallContact(this.pos.x, this.pos.z, this.radius, w.reach, this.pos.y);
+    if (!n) return;
+    let dx = wx; let dz = wz;
+    if (!hasInput) { dx = -sin; dz = -cos; }
+    const into = dx * n.nx + dz * n.nz; // < 0: aiming into the wall
+    if (into < -0.5) {
+      this.vel.x = n.nx * w.climbAway; this.vel.z = n.nz * w.climbAway;
+    } else {
+      if (into < 0) { dx -= into * n.nx; dz -= into * n.nz; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l; }
+      let vx = dx * w.kickSpeed; let vz = dz * w.kickSpeed;
+      const away = vx * n.nx + vz * n.nz;
+      if (away < w.minAway) { vx += n.nx * (w.minAway - away); vz += n.nz * (w.minAway - away); }
+      this.vel.x = vx; this.vel.z = vz;
+    }
+    this.vel.y = w.upSpeed;
+    this.wallCd = w.cooldown;
   }
 
   syncCamera() {

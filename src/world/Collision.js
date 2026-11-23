@@ -78,4 +78,23 @@ export class Collision {
     }
     return best;
   }
+
+  /**
+   * Nearest wall within `reach` of a circle's edge, taller than feetY + STEP_HEIGHT.
+   * Returns {nx,nz} (unit normal pointing away from the wall) or null.
+   */
+  wallContact(x, z, r, reach, feetY = 0) {
+    let best = null; let bestD = Infinity;
+    for (const b of this.boxes) {
+      if (b.top <= feetY + STEP_HEIGHT) continue;
+      const cx = Math.max(b.minX, Math.min(x, b.maxX));
+      const cz = Math.max(b.minZ, Math.min(z, b.maxZ));
+      const dx = x - cx; const dz = z - cz;
+      const d = Math.hypot(dx, dz);
+      if (d > r + reach || d >= bestD) continue;
+      if (d < 1e-6) continue;
+      bestD = d; best = { nx: dx / d, nz: dz / d };
+    }
+    return best;
+  }
 }
