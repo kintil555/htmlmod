@@ -44,5 +44,5 @@ export const CONFIG = {
   },
   limits: { maxNextbots: 30, maxProps: 80 },
   catchState: { respawnDelay: 1.6, invulnerable: 2.0, pushRadius: 14 },
-  spawnMenu: { stickyMs: 250, escGraceMs: 800 },
+  spawnMenu: { stickyMs: 250, closeGraceMs: 800 },
 };

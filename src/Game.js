@@ -20,7 +20,7 @@ export class Game {
     this.uiRoot = uiRoot;
     this.state = 'menu';
     this.paused = false;
-    this._escCloseAt = -Infinity;
+    this._menuClosedAt = -Infinity;
     this.stats = { caught: 0, survived: 0 };
     this.respawnTimer = 0;
     this.hudTimer = 0;
@@ -125,7 +125,15 @@ export class Game {
 
   _lock() {
     const p = this.canvas.requestPointerLock();
-    p?.catch?.(() => { if (this.state === 'playing' && !this.paused) this.pause(); });
+    p?.catch?.(() => {
+      if (this.state !== 'playing' || this.paused || this.spawnMenu.isOpen) return;
+      if (this._inMenuGrace()) this._armRelock(); else this.pause();
+    });
+  }
+
+  /** True shortly after the Q menu closed: lock changes in this window come from the menu, not the player pausing. */
+  _inMenuGrace() {
+    return performance.now() - this._menuClosedAt < CONFIG.spawnMenu.closeGraceMs;
   }
 
   _armRelock() {
@@ -143,12 +151,12 @@ export class Game {
     document.addEventListener('pointerlockchange', () => {
       this.input.locked = document.pointerLockElement === this.canvas;
       if (this.input.locked || this.state !== 'playing' || this.paused || this.spawnMenu.isOpen) return;
-      if (performance.now() - this._escCloseAt < CONFIG.spawnMenu.escGraceMs) this._armRelock();
+      if (this._inMenuGrace()) this._armRelock();
       else this.pause();
     });
     document.addEventListener('pointerlockerror', () => {
-      if (performance.now() - this._escCloseAt < CONFIG.spawnMenu.escGraceMs) { this._armRelock(); return; }
-      if (this.state === 'playing' && !this.paused) this.pause();
+      if (this.state !== 'playing' || this.paused || this.spawnMenu.isOpen) return;
+      if (this._inMenuGrace()) this._armRelock(); else this.pause();
     });
 
     this.input.events.on('keydown', ({ code, repeat }) => {
@@ -173,16 +181,17 @@ export class Game {
     });
   }
 
-  _closeSpawnMenu() {
+  /** Every menu close goes through here so the grace window is always stamped. */
+  _closeSpawnMenu({ relock = true } = {}) {
+    this._menuClosedAt = performance.now();
     this.spawnMenu.close();
-    if (this.state === 'playing' && !this.paused) this._lock();
+    if (this.state !== 'playing' || this.paused) return;
+    if (relock) this._lock(); else this._armRelock();
   }
 
   /** Esc is not a user gesture and the browser may eat it as a pointer-lock exit: close the menu, wait for a click to relock, never pause. */
   _closeMenuByEsc() {
-    this._escCloseAt = performance.now();
-    this.spawnMenu.close();
-    this._armRelock();
+    this._closeSpawnMenu({ relock: false });
   }
 
   /* ---------------- tools ---------------- */
