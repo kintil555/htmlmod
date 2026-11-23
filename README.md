@@ -1,0 +1,20 @@
+# Html — Sandbox
+
+Three.js (r187) sandbox game, GMod-style. Spawn nextbots and props, survive.
+
+## Run
+ES modules need an HTTP server (not `file://`):
+
+    python3 -m http.server 8080      # then open http://localhost:8080
+    # or: npx serve .
+
+Use desktop Chrome/Edge/Firefox. Pointer lock requires a click on Play.
+
+## Controls
+WASD move, Shift sprint, Space jump, mouse look, hold/tap Q spawn menu, R remove aimed object, Esc pause.
+
+## Tuning
+Player speed is in `src/config.js` (walk 10, sprint 15). Nextbot speed/turning/slide are per bot in `src/content/nextbots.js`.
+
+## Extending
+See `docs/AGENTS.md`.
