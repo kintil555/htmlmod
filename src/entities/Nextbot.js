@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Entity } from './Entity.js';
-import { stepChaser, newChaserState, planObstacle, leadPoint, closeParams } from './steering.js';
+import { stepChaser, newChaserState, planObstacle } from './steering.js';
 import { CONFIG } from '../config.js';
 
 const PLANE = new THREE.PlaneGeometry(1, 1);
@@ -97,14 +97,11 @@ export class Nextbot extends Entity {
     } else {
       const n = CONFIG.nextbot;
       const dist = Math.hypot(player.pos.x - s.x, player.pos.z - s.z);
-      // Close range: re-aim every frame (no stale goal). Far: cheap snapshot every repathInterval.
+      // GMod PathFollower style: goal is a snapshot of the target, recomputed every repathInterval (no lead, no close boost).
       this.repathT -= dt;
-      if (dist < n.closeRange || this.repathT <= 0) {
-        const aim = leadPoint(s, player.pos.x, player.pos.z, player.vel.x, player.vel.z, this.params.speed, n.leadFactor, n.leadMax);
-        this.goal.x = aim.x; this.goal.z = aim.z; this.repathT = n.repathInterval;
-      }
+      if (this.repathT <= 0) { this.goal.x = player.pos.x; this.goal.z = player.pos.z; this.repathT = n.repathInterval; }
       this._navigate(dt, dist, player.pos.y > this.y + n.targetAboveGap);
-      stepChaser(s, this.goal.x, this.goal.z, dt, closeParams(this.params, dist, n));
+      stepChaser(s, this.goal.x, this.goal.z, dt, this.params);
     }
     if (this.jumpCd > 0) this.jumpCd -= dt;
     const hit = this.world.collision.resolveCircle(s, this.radius, this.y);

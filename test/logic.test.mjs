@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
-import { stepChaser, newChaserState, riseTime, planObstacle, closeParams } from '../src/entities/steering.js';
-import { CONFIG } from '../src/config.js';
+import { stepChaser, newChaserState, riseTime, planObstacle } from '../src/entities/steering.js';
 import { Collision } from '../src/world/Collision.js';
 
 const CATCH = 1.7; // upper bound of catch distance (bot radius 1.1 + player 0.4 + 0.2)
 
-const REPATH = 0.08; // matches CONFIG.nextbot.repathInterval: the bot chases a goal snapshot, like GMod's path recompute
+const REPATH = 0.1; // matches CONFIG.nextbot.repathInterval: the bot chases a goal snapshot, like GMod's path recompute
 
 /** Player stands still until the bot is within cutDist, then runs sideways at `speed`. Returns min distance after cut. */
 function dodge(params, cutDist, speed) {
@@ -15,18 +14,18 @@ function dodge(params, cutDist, speed) {
     if (!cut && Math.hypot(px - bot.x, pz - bot.z) < cutDist) cut = true;
     if (cut) px += speed / 60;
     gt -= 1 / 60;
-    if (gt <= 0 || Math.hypot(px - bot.x, pz - bot.z) < CONFIG.nextbot.closeRange) { gx = px; gz = pz; gt = REPATH; }
-    stepChaser(bot, gx, gz, 1 / 60, closeParams(params, Math.hypot(px - bot.x, pz - bot.z), CONFIG.nextbot));
+    if (gt <= 0) { gx = px; gz = pz; gt = REPATH; }
+    stepChaser(bot, gx, gz, 1 / 60, params);
     if (cut) min = Math.min(min, Math.hypot(px - bot.x, pz - bot.z));
   }
   return cut ? min : Infinity;
 }
-const obunga = { speed: 14.7, turnRate: 2.6, accel: 52, decel: 64 };
-const superMunci = { speed: 16.8, turnRate: 2.2, accel: 44, decel: 56 };
+const obunga = { speed: 14.7, turnRate: 3.9, accel: 29, decel: 29 };
+const superMunci = { speed: 16.8, turnRate: 3.3, accel: 34, decel: 34 };
 
 assert.ok(dodge(obunga, 5, 21) > CATCH, 'sprint-cut at 5 units dodges Obunga');
 assert.ok(dodge(obunga, 3, 21) > CATCH, 'sprint-cut at 3 units still dodges Obunga');
-assert.ok(dodge(obunga, 3, 14) < CATCH, 'walk-cut at point-blank cannot shake a close bot (GMod-like)');
+assert.ok(dodge(obunga, 5, 14) < CATCH, 'walking sidestep cannot beat a bot faster than walk speed');
 assert.ok(dodge(superMunci, 3, 14) < CATCH, 'walking cannot escape the fastest bot');
 assert.ok(dodge(superMunci, 5, 21) > CATCH, 'sprinting escapes the fastest bot');
 
