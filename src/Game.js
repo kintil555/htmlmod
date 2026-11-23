@@ -122,9 +122,25 @@ export class Game {
     this.screens.show('mainmenu');
   }
 
-  _lock() {
+  /** soft = relock attempt that may legitimately be refused (Esc is not a user gesture): never pauses, waits for a click. */
+  _lock(soft = false) {
+    this._softLock = soft;
     const p = this.canvas.requestPointerLock();
-    p?.catch?.(() => { if (this.state === 'playing' && !this.paused) this.pause(); });
+    p?.catch?.(() => {
+      if (soft) this._armRelock();
+      else if (this.state === 'playing' && !this.paused) this.pause();
+    });
+  }
+
+  _armRelock() {
+    this._softLock = false;
+    if (this._relockArmed) return;
+    this._relockArmed = true;
+    toast(STR.hud.clickToResume);
+    this.canvas.addEventListener('mousedown', () => {
+      this._relockArmed = false;
+      if (this.state === 'playing' && !this.paused && !this.spawnMenu.isOpen) this._lock();
+    }, { once: true });
   }
 
   /* ---------------- input ---------------- */
@@ -134,6 +150,7 @@ export class Game {
       if (!this.input.locked && this.state === 'playing' && !this.paused && !this.spawnMenu.isOpen) this.pause();
     });
     document.addEventListener('pointerlockerror', () => {
+      if (this._softLock) { this._armRelock(); return; }
       if (this.state === 'playing' && !this.paused) this.pause();
     });
 
@@ -147,7 +164,7 @@ export class Game {
           document.exitPointerLock();
         }
       } else if (code === 'Escape' && this.spawnMenu.isOpen) {
-        this._closeSpawnMenu();
+        this._closeSpawnMenu(true);
       } else if (code === 'KeyR' && !this.spawnMenu.isOpen) {
         this.removeAimed();
       }
@@ -159,9 +176,9 @@ export class Game {
     });
   }
 
-  _closeSpawnMenu() {
+  _closeSpawnMenu(soft = false) {
     this.spawnMenu.close();
-    if (this.state === 'playing' && !this.paused) this._lock();
+    if (this.state === 'playing' && !this.paused) this._lock(soft);
   }
 
   /* ---------------- tools ---------------- */

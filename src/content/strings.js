@@ -32,6 +32,7 @@ export const STR = {
     caught: 'Caught', survived: 'Survived', nextbots: 'Nextbots', props: 'Props',
     caughtBy: name => `Caught by ${name}`,
     hints: 'Q Spawn   R Remove   Esc Menu',
+    clickToResume: 'Click to resume',
   },
   spawn: {
     clear: 'Clear All', nextbotLimit: 'Nextbot limit reached', propLimit: 'Prop limit reached',
