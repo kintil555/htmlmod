@@ -20,6 +20,7 @@ export class Game {
     this.uiRoot = uiRoot;
     this.state = 'menu';
     this.paused = false;
+    this._escCloseAt = -Infinity;
     this.stats = { caught: 0, survived: 0 };
     this.respawnTimer = 0;
     this.hudTimer = 0;
@@ -122,18 +123,12 @@ export class Game {
     this.screens.show('mainmenu');
   }
 
-  /** soft = relock attempt that may legitimately be refused (Esc is not a user gesture): never pauses, waits for a click. */
-  _lock(soft = false) {
-    this._softLock = soft;
+  _lock() {
     const p = this.canvas.requestPointerLock();
-    p?.catch?.(() => {
-      if (soft) this._armRelock();
-      else if (this.state === 'playing' && !this.paused) this.pause();
-    });
+    p?.catch?.(() => { if (this.state === 'playing' && !this.paused) this.pause(); });
   }
 
   _armRelock() {
-    this._softLock = false;
     if (this._relockArmed) return;
     this._relockArmed = true;
     toast(STR.hud.clickToResume);
@@ -147,10 +142,12 @@ export class Game {
   _bindInput() {
     document.addEventListener('pointerlockchange', () => {
       this.input.locked = document.pointerLockElement === this.canvas;
-      if (!this.input.locked && this.state === 'playing' && !this.paused && !this.spawnMenu.isOpen) this.pause();
+      if (this.input.locked || this.state !== 'playing' || this.paused || this.spawnMenu.isOpen) return;
+      if (performance.now() - this._escCloseAt < CONFIG.spawnMenu.escGraceMs) this._armRelock();
+      else this.pause();
     });
     document.addEventListener('pointerlockerror', () => {
-      if (this._softLock) { this._armRelock(); return; }
+      if (performance.now() - this._escCloseAt < CONFIG.spawnMenu.escGraceMs) { this._armRelock(); return; }
       if (this.state === 'playing' && !this.paused) this.pause();
     });
 
@@ -164,7 +161,7 @@ export class Game {
           document.exitPointerLock();
         }
       } else if (code === 'Escape' && this.spawnMenu.isOpen) {
-        this._closeSpawnMenu(true);
+        this._closeMenuByEsc();
       } else if (code === 'KeyR' && !this.spawnMenu.isOpen) {
         this.removeAimed();
       }
@@ -176,9 +173,16 @@ export class Game {
     });
   }
 
-  _closeSpawnMenu(soft = false) {
+  _closeSpawnMenu() {
     this.spawnMenu.close();
-    if (this.state === 'playing' && !this.paused) this._lock(soft);
+    if (this.state === 'playing' && !this.paused) this._lock();
+  }
+
+  /** Esc is not a user gesture and the browser may eat it as a pointer-lock exit: close the menu, wait for a click to relock, never pause. */
+  _closeMenuByEsc() {
+    this._escCloseAt = performance.now();
+    this.spawnMenu.close();
+    this._armRelock();
   }
 
   /* ---------------- tools ---------------- */
