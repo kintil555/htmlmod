@@ -67,3 +67,21 @@ export function planObstacle(blocker, feetY, speed, jumpSpeed, gravity, radius, 
   if (tRise === null) return targetAbove && blocker.dist <= radius + n.climbReach ? 'climb' : 'avoid';
   return blocker.dist <= speed * tRise + radius + n.jumpMargin ? 'jump' : 'wait';
 }
+
+/** Close range: a nextbot corners harder and brakes/accelerates faster, so late cuts overshoot less (GMod bots hug tight near the target). */
+export function closeParams(p, dist, n) {
+  const k = Math.max(0, 1 - dist / n.closeRange);
+  return {
+    speed: p.speed,
+    turnRate: p.turnRate * (1 + n.closeTurnBoost * k),
+    accel: p.accel * (1 + n.closeAccelBoost * k),
+    decel: p.decel * (1 + n.closeAccelBoost * k),
+  };
+}
+
+/** Where to aim: the target position extrapolated along its velocity (mild pursuit, not tail-chasing). */
+export function leadPoint(s, tx, tz, tvx, tvz, speed, factor, maxT) {
+  const dist = Math.hypot(tx - s.x, tz - s.z);
+  const t = Math.min(maxT, dist / Math.max(speed, 1)) * factor;
+  return { x: tx + tvx * t, z: tz + tvz * t };
+}
