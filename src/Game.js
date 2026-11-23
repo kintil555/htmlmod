@@ -189,9 +189,9 @@ export class Game {
     if (relock) this._lock(); else this._armRelock();
   }
 
-  /** Esc is not a user gesture and the browser may eat it as a pointer-lock exit: close the menu, wait for a click to relock, never pause. */
+  /** Esc closes the menu and relocks at once. Esc is not a user gesture, so if the browser refuses, the grace window falls back to click-to-resume instead of pausing. */
   _closeMenuByEsc() {
-    this._closeSpawnMenu({ relock: false });
+    this._closeSpawnMenu();
   }
 
   /* ---------------- tools ---------------- */
