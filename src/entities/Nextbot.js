@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Entity } from './Entity.js';
-import { stepChaser, newChaserState, leadPoint, planObstacle, closeParams } from './steering.js';
+import { stepChaser, newChaserState, planObstacle } from './steering.js';
 import { CONFIG } from '../config.js';
 
 const PLANE = new THREE.PlaneGeometry(1, 1);
@@ -19,7 +19,7 @@ function materialFor(def, texture) {
 
 /**
  * Billboard chaser. Definition fields (see content/nextbots.js):
- * id, name, texture, height, speed, turnRate, grip.
+ * id, name, texture, height, speed, turnRate, accel, decel.
  */
 export class Nextbot extends Entity {
   constructor(def, texture, x, z, face) {
@@ -30,8 +30,10 @@ export class Nextbot extends Entity {
     const img = texture.image;
     const width = def.height * (img.width / img.height);
     this.radius = Math.min(1.1, Math.max(0.55, width * 0.28));
-    this.params = { speed: def.speed, turnRate: def.turnRate, grip: def.grip };
+    this.params = { speed: def.speed, turnRate: def.turnRate, accel: def.accel, decel: def.decel };
     this.s = newChaserState(x, z, face.x, face.z);
+    this.goal = { x: face.x, z: face.z };
+    this.repathT = Math.random() * CONFIG.nextbot.repathInterval;
     this.phase = Math.random() * 6;
     this.y = 0;
     this.vy = 0;
@@ -94,10 +96,11 @@ export class Nextbot extends Entity {
       s.x += s.vx * dt; s.z += s.vz * dt;
     } else {
       const n = CONFIG.nextbot;
-      const aim = leadPoint(s, player.pos.x, player.pos.z, player.vel.x, player.vel.z, this.params.speed, n.leadFactor, n.leadMax);
+      this.repathT -= dt;
+      if (this.repathT <= 0) { this.goal.x = player.pos.x; this.goal.z = player.pos.z; this.repathT = n.repathInterval; }
       const dist = Math.hypot(player.pos.x - s.x, player.pos.z - s.z);
       this._navigate(dt, dist, player.pos.y > this.y + n.targetAboveGap);
-      stepChaser(s, aim.x, aim.z, dt, closeParams(this.params, dist, n));
+      stepChaser(s, this.goal.x, this.goal.z, dt, this.params);
     }
     if (this.jumpCd > 0) this.jumpCd -= dt;
     const hit = this.world.collision.resolveCircle(s, this.radius, this.y);

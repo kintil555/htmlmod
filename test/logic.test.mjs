@@ -1,23 +1,27 @@
 import assert from 'node:assert/strict';
-import { stepChaser, newChaserState, riseTime, leadPoint, planObstacle, closeParams } from '../src/entities/steering.js';
+import { stepChaser, newChaserState, riseTime, planObstacle } from '../src/entities/steering.js';
 import { Collision } from '../src/world/Collision.js';
 
 const CATCH = 1.7; // upper bound of catch distance (bot radius 1.1 + player 0.4 + 0.2)
 
+const REPATH = 0.2; // matches CONFIG.nextbot.repathInterval: the bot chases a goal snapshot, like GMod's path recompute
+
 /** Player stands still until the bot is within cutDist, then runs sideways at `speed`. Returns min distance after cut. */
 function dodge(params, cutDist, speed) {
   const bot = newChaserState(0, 0, 0, 40);
-  let px = 0; const pz = 40; let cut = false; let min = Infinity;
+  let px = 0; const pz = 40; let cut = false; let min = Infinity; let gx = px; let gz = pz; let gt = 0;
   for (let t = 0; t < 10; t += 1 / 60) {
     if (!cut && Math.hypot(px - bot.x, pz - bot.z) < cutDist) cut = true;
     if (cut) px += speed / 60;
-    stepChaser(bot, px, pz, 1 / 60, params);
+    gt -= 1 / 60;
+    if (gt <= 0) { gx = px; gz = pz; gt = REPATH; }
+    stepChaser(bot, gx, gz, 1 / 60, params);
     if (cut) min = Math.min(min, Math.hypot(px - bot.x, pz - bot.z));
   }
   return cut ? min : Infinity;
 }
-const obunga = { speed: 14.7, turnRate: 2.6, grip: 3.0 };
-const superMunci = { speed: 16.8, turnRate: 2.2, grip: 2.2 };
+const obunga = { speed: 14.7, turnRate: 2.6, accel: 26, decel: 32 };
+const superMunci = { speed: 16.8, turnRate: 2.2, accel: 22, decel: 28 };
 
 assert.ok(dodge(obunga, 3, 21) > CATCH, 'sprint-cut at 3 units dodges Obunga');
 assert.ok(dodge(obunga, 3, 14) > CATCH, 'walk-cut at 3 units dodges Obunga');
@@ -29,6 +33,12 @@ const b = newChaserState(0, 0, 0, 40); b.vz = 14.7;
 let qx = 0;
 for (let i = 0; i < 20; i++) { qx += 21 / 60; stepChaser(b, qx, 6, 1 / 60, obunga); }
 assert.ok(b.vz > 3, 'slides forward after cut, vz=' + b.vz);
+
+// GMod-style braking: reversing at full speed takes time and distance (decel-limited), not an instant U-turn.
+const rev = newChaserState(0, 0, 0, 40); rev.vz = 14.7; let revFrames = 0;
+while (rev.vz > 0 && revFrames < 600) { stepChaser(rev, 0, -40, 1 / 60, obunga); revFrames++; }
+assert.ok(revFrames / 60 > 0.4, 'needs >0.4s to brake before reversing, got ' + revFrames / 60);
+assert.ok(rev.z > 3, 'overshoots >3 units while braking, got ' + rev.z);
 
 // Steady chase: a sprinting player keeps the gap.
 const chaser = newChaserState(0, 0, 0, 30); let z = 30;
@@ -81,14 +91,9 @@ assert.equal(planObstacle({ box: { top: 6 }, dist: 2 }, 0, 15, 26, 30, 1, N), 'j
   }
   assert.ok(crossed, 'bot jumps over a 6-high wall');
 }
-const lp = leadPoint({ x: 0, z: 0 }, 0, 20, 10, 0, 20, 0.6, 1.2);
-assert.ok(lp.x > 0 && lp.z === 20, 'lead aims ahead of a moving target');
-
-const NC = { ...N, climbReach: 1.5, closeRange: 14, closeTurnBoost: 1.2, closeGripBoost: 1.0 };
+const NC = { ...N, climbReach: 1.5 };
 assert.equal(planObstacle({ box: { top: 20 }, dist: 1 }, 0, 15, 26, 30, 1, NC, true), 'climb', 'tall wall, target above, close: climb');
 assert.equal(planObstacle({ box: { top: 20 }, dist: 1 }, 0, 15, 26, 30, 1, NC, false), 'avoid', 'target not above: go around');
 assert.equal(planObstacle({ box: { top: 20 }, dist: 9 }, 0, 15, 26, 30, 1, NC, true), 'avoid', 'too far to climb yet');
-assert.equal(closeParams(obunga, 99, NC).turnRate, obunga.turnRate, 'far: unchanged');
-assert.ok(closeParams(obunga, 0, NC).turnRate > obunga.turnRate * 2, 'close: much tighter turn');
 
 console.log('all logic tests passed');
