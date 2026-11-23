@@ -60,11 +60,17 @@ export function leadPoint(s, tx, tz, tvx, tvz, speed, factor, maxT) {
 
 /**
  * Decide what to do about a blocker ahead. Returns 'jump' (start the jump now),
- * 'wait' (clearable, but too early), 'avoid' (too tall: go around) or 'none'.
+ * 'wait' (clearable, but too early), 'climb' (too tall but the target is above: scale it), 'avoid' (too tall: go around) or 'none'.
  */
-export function planObstacle(blocker, feetY, speed, jumpSpeed, gravity, radius, n) {
+export function planObstacle(blocker, feetY, speed, jumpSpeed, gravity, radius, n, targetAbove = false) {
   if (!blocker) return 'none';
   const tRise = riseTime(jumpSpeed, gravity, blocker.box.top - feetY + n.clearance);
-  if (tRise === null) return 'avoid';
+  if (tRise === null) return targetAbove && blocker.dist <= radius + n.climbReach ? 'climb' : 'avoid';
   return blocker.dist <= speed * tRise + radius + n.jumpMargin ? 'jump' : 'wait';
+}
+
+/** Tighter turning and grip when close, so late sideways cuts overshoot less. */
+export function closeParams(p, dist, n) {
+  const k = Math.max(0, 1 - dist / n.closeRange);
+  return { speed: p.speed, turnRate: p.turnRate * (1 + n.closeTurnBoost * k), grip: p.grip * (1 + n.closeGripBoost * k) };
 }

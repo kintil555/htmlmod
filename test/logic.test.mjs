@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { stepChaser, newChaserState, riseTime, leadPoint, planObstacle } from '../src/entities/steering.js';
+import { stepChaser, newChaserState, riseTime, leadPoint, planObstacle, closeParams } from '../src/entities/steering.js';
 import { Collision } from '../src/world/Collision.js';
 
 const CATCH = 1.7; // upper bound of catch distance (bot radius 1.1 + player 0.4 + 0.2)
@@ -83,5 +83,12 @@ assert.equal(planObstacle({ box: { top: 6 }, dist: 2 }, 0, 15, 26, 30, 1, N), 'j
 }
 const lp = leadPoint({ x: 0, z: 0 }, 0, 20, 10, 0, 20, 0.6, 1.2);
 assert.ok(lp.x > 0 && lp.z === 20, 'lead aims ahead of a moving target');
+
+const NC = { ...N, climbReach: 1.5, closeRange: 14, closeTurnBoost: 1.2, closeGripBoost: 1.0 };
+assert.equal(planObstacle({ box: { top: 20 }, dist: 1 }, 0, 15, 26, 30, 1, NC, true), 'climb', 'tall wall, target above, close: climb');
+assert.equal(planObstacle({ box: { top: 20 }, dist: 1 }, 0, 15, 26, 30, 1, NC, false), 'avoid', 'target not above: go around');
+assert.equal(planObstacle({ box: { top: 20 }, dist: 9 }, 0, 15, 26, 30, 1, NC, true), 'avoid', 'too far to climb yet');
+assert.equal(closeParams(obunga, 99, NC).turnRate, obunga.turnRate, 'far: unchanged');
+assert.ok(closeParams(obunga, 0, NC).turnRate > obunga.turnRate * 2, 'close: much tighter turn');
 
 console.log('all logic tests passed');

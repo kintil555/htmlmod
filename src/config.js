@@ -28,6 +28,12 @@ export const CONFIG = {
     stuckSpeedFrac: 0.25,
     avoidTime: 0.5,
     catchBelow: 1.2,
+    climbSpeed: 14,
+    climbReach: 1.5,
+    targetAboveGap: 1.0,
+    closeRange: 14,
+    closeTurnBoost: 1.2,
+    closeGripBoost: 1.0,
   },
   world: {
     halfSize: 120,

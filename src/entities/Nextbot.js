@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Entity } from './Entity.js';
-import { stepChaser, newChaserState, leadPoint, planObstacle } from './steering.js';
+import { stepChaser, newChaserState, leadPoint, planObstacle, closeParams } from './steering.js';
 import { CONFIG } from '../config.js';
 
 const PLANE = new THREE.PlaneGeometry(1, 1);
@@ -68,15 +68,16 @@ export class Nextbot extends Entity {
   }
 
   /** Look ahead for walls: jump what is clearable, steer around what is not, hop when stuck. */
-  _navigate(dt, distToTarget) {
+  _navigate(dt, distToTarget, targetAbove) {
     const n = CONFIG.nextbot; const s = this.s;
     const sp = Math.hypot(s.vx, s.vz);
     const dx = sp > 1 ? s.vx / sp : Math.sin(s.heading);
     const dz = sp > 1 ? s.vz / sp : Math.cos(s.heading);
     const reach = Math.max(n.lookAheadMin, sp * n.lookAheadTime) + this.radius;
     const blk = this.world.collision.sweepBlocker(s.x, s.z, dx, dz, reach, this.radius, this.y);
-    const plan = planObstacle(blk, this.y, Math.max(sp, 1), n.jumpSpeed, n.gravity, this.radius, n);
+    const plan = planObstacle(blk, this.y, Math.max(sp, 1), n.jumpSpeed, n.gravity, this.radius, n, targetAbove);
     if (plan === 'jump') this._jump();
+    else if (plan === 'climb') { this.vy = n.climbSpeed; this.onGround = false; }
     else if (plan === 'avoid') { s.avx = -dx; s.avz = -dz; s.avoidT = n.avoidTime; }
 
     if (this.onGround && distToTarget > 3 && sp < this.params.speed * n.stuckSpeedFrac) this.stuckT += dt;
@@ -94,8 +95,9 @@ export class Nextbot extends Entity {
     } else {
       const n = CONFIG.nextbot;
       const aim = leadPoint(s, player.pos.x, player.pos.z, player.vel.x, player.vel.z, this.params.speed, n.leadFactor, n.leadMax);
-      this._navigate(dt, Math.hypot(player.pos.x - s.x, player.pos.z - s.z));
-      stepChaser(s, aim.x, aim.z, dt, this.params);
+      const dist = Math.hypot(player.pos.x - s.x, player.pos.z - s.z);
+      this._navigate(dt, dist, player.pos.y > this.y + n.targetAboveGap);
+      stepChaser(s, aim.x, aim.z, dt, closeParams(this.params, dist, n));
     }
     if (this.jumpCd > 0) this.jumpCd -= dt;
     const hit = this.world.collision.resolveCircle(s, this.radius, this.y);
