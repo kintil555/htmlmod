@@ -1,5 +1,6 @@
 import './content/index.js';
 import { Game } from './Game.js';
+import { Mods } from './mods/Mods.js';
 import { STR } from './content/strings.js';
 
 // Deterrent only: blocks right-click "Save image" and drag-out. Files stay reachable via DevTools/network.
@@ -18,7 +19,10 @@ function fail(message) {
 try {
   const probe = document.createElement('canvas');
   if (!navigator.gpu && !probe.getContext('webgl2')) throw new Error(STR.errors.webgl);
-  await new Game({ canvas, uiRoot }).boot();
+  await Mods.init(); // before boot: mods may add nextbots/props/maps. A failing mod never stops the game.
+  const game = new Game({ canvas, uiRoot });
+  await game.boot();
+  Mods.attach(game);
 } catch (err) {
   fail(err.message);
 }

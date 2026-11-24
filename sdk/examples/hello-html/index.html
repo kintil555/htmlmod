@@ -1,0 +1,29 @@
+<!doctype html>
+<!-- HTML mod: <body> and <style> go into a shadow root on top of the game. Scripts get `api`, `root`, `THREE`.
+     Use root.querySelector (not document). Relative src/href of files in the zip work. -->
+<style>
+  .panel { position: absolute; right: 16px; top: 16px; padding: 12px; background: rgba(16,18,22,.88); color: #eceff2;
+           border: 1px solid rgba(255,255,255,.22); font-family: sans-serif; pointer-events: auto; display: none; }
+  .panel.on { display: block; }
+  button { display: block; width: 100%; margin-top: 6px; padding: 6px 10px; cursor: pointer; }
+</style>
+<div class="panel" id="panel">
+  <b>Hello HTML</b>
+  <button id="crate">Spawn crate</button>
+  <button id="wall">Spawn wall</button>
+  <small>Press T to toggle the mouse</small>
+</div>
+<script>
+  const panel = root.getElementById('panel');
+  let release = null;
+  const open = () => { panel.classList.add('on'); release = api.cursor.free(); };   // free the mouse without pausing
+  const close = () => { panel.classList.remove('on'); release?.(); release = null; };
+  root.getElementById('crate').onclick = () => api.spawn.prop('crate');
+  root.getElementById('wall').onclick = () => api.spawn.prop('wall-x');
+  api.on('keydown', ({ code, repeat }) => {
+    if (code !== 'KeyT' || repeat || api.game?.state !== 'playing') return;
+    release ? close() : open();
+  });
+  api.on('pause', close);
+  api.on('quit', close);
+</script>

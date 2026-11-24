@@ -197,4 +197,28 @@ export const CONFIG = {
     settleRate: 5,
   },
   spawnMenu: { stickyMs: 250, closeGraceMs: 800 },
+  /** Mod loader (src/mods). Mods are ZIP files with HTML/JS, stored in IndexedDB. API contract: sdk/README.md. */
+  mods: {
+    apiVersion: 1,
+    dbName: 'htmlmod.mods',
+    storagePrefix: 'htmlmod.mod.',
+    skipParam: 'nomods',
+    idPattern: '^[a-z0-9][a-z0-9_-]{1,39}$',
+    maxZipBytes: 50 * 1024 * 1024,
+    maxEntries: 2000,
+    maxUnpackedBytes: 200 * 1024 * 1024,
+    loadTimeoutMs: 10000,
+    maxRuntimeErrors: 20,
+    /** Fields a mod may omit from nextbot / prop definitions. */
+    defaults: { nextbot: { height: 3.2, speed: 14, turnRate: 4, accel: 28, decel: 28 }, prop: { color: '#9a9fa5' } },
+    /** Order value for mod content so it lists after built-in content. */
+    orderBase: 1000,
+    entryCandidates: ['main.js', 'index.js', 'index.html'],
+    /** Files shipped by the "Download SDK" button: paths are relative to sdk/ and keep their path inside the zip. */
+    sdkZipName: 'htmlmod-sdk.zip',
+    sdkFiles: ['README.md', 'htmlmod.d.ts', 'examples/hello-js/mod.json', 'examples/hello-js/main.js', 'examples/hello-js/bot.png', 'examples/hello-html/mod.json', 'examples/hello-html/index.html'],
+    /** "Download template" ships this example as a ready-to-edit mod (paths relative to the example folder). */
+    templateDir: 'examples/hello-js/',
+    templateZipName: 'hello-mod.zip',
+  },
 };

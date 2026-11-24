@@ -5,6 +5,7 @@ import { collectTriangles } from './MapLoader.js';
 import { NavGraph } from './NavGraph.js';
 import { SkyAmbient } from './SkyAmbient.js';
 import { Water } from './Water.js';
+import { events } from '../core/Events.js';
 
 /** Owns the scene, the baked map (render meshes + colliders) and the entity list. */
 export class World {
@@ -47,12 +48,14 @@ export class World {
     this.scene.add(entity.object3d);
     entity.world = this;
     entity.onAdded();
+    events.emit('game:entity:add', entity);
     return entity;
   }
   remove(entity) {
     if (!this.entities.delete(entity)) return;
     this.scene.remove(entity.object3d);
     entity.onRemoved();
+    events.emit('game:entity:remove', entity);
   }
   ofType(type) { return [...this.entities].filter(e => e.type === type); }
   count(type) { let n = 0; for (const e of this.entities) if (e.type === type) n++; return n; }

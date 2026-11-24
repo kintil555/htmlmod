@@ -1,0 +1,9 @@
+{
+  "id": "hello-mod",
+  "name": "Hello Mod",
+  "version": "1.0.0",
+  "author": "You",
+  "description": "Starter mod: a nextbot, a prop, a spawn tab, a setting, a hotkey and a HUD label.",
+  "api": 1,
+  "main": "main.js"
+}

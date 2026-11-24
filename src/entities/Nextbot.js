@@ -19,6 +19,12 @@ function materialFor(def, texture) {
   return materials.get(def.id);
 }
 
+/** Drops the cached material of a nextbot definition (mods call this when they unload). */
+export function forgetNextbotMaterial(id) {
+  materials.get(id)?.dispose();
+  materials.delete(id);
+}
+
 /**
  * Billboard chaser. Definition fields (see content/nextbots.js):
  * id, name, texture, height, speed, turnRate, accel, decel.

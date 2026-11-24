@@ -1,0 +1,9 @@
+{
+  "id": "hello-html",
+  "name": "Hello HTML",
+  "version": "1.0.0",
+  "author": "You",
+  "description": "HTML mod: a floating panel that spawns props with a mouse click.",
+  "api": 1,
+  "html": "index.html"
+}

@@ -19,5 +19,8 @@ Player speed is in `src/config.js` (walk 14, sprint 21, jump 14.5). Nextbot jump
 ## Map
 GM Construct, baked from the Sketchfab model Gm_construct by CHANO (CC BY 4.0, see `assets/maps/gm_construct/LICENSE.txt`). Regenerate with `tools/bake_map.py`.
 
+## Mods
+Main menu → Mods: install `.zip` mods (HTML/JS), toggle or remove them, download the SDK and a starter template. Start without mods with `?nomods`. Authoring guide: `sdk/README.md`.
+
 ## Extending
 See `docs/AGENTS.md`.

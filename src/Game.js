@@ -9,12 +9,13 @@ import { World } from './world/World.js';
 import { Environment } from './world/Environment.js';
 import { PostFx } from './world/PostFx.js';
 import { Settings } from './core/Settings.js';
+import { events } from './core/Events.js';
 import { loadMapData, buildMap } from './world/MapLoader.js';
 import { Player } from './entities/Player.js';
 import { Nextbot } from './entities/Nextbot.js';
 import { Prop } from './entities/Prop.js';
 import { el, ScreenManager, toast } from './ui/ui.js';
-import { MainMenuScreen, PauseScreen, HelpScreen, SettingsScreen } from './ui/screens.js';
+import { MainMenuScreen, PauseScreen, HelpScreen, SettingsScreen, ModsScreen } from './ui/screens.js';
 import { SpawnMenu } from './ui/SpawnMenu.js';
 import { Hud } from './ui/Hud.js';
 
@@ -28,6 +29,8 @@ export class Game {
     this._menuClosedAt = -Infinity;
     this.stats = { caught: 0, survived: 0 };
     this.respawnTimer = 0;
+    /** Number of open UI layers that need the mouse (mods call api.cursor.free()). */
+    this.cursorHolds = 0;
     this.hudTimer = 0;
     this.lastT = 0;
     this._qDownAt = 0;
@@ -86,15 +89,18 @@ export class Game {
     this.uiRoot.append(this.hud.root, this.spawnMenu.root);
 
     const settingsScreen = SettingsScreen({ onBack: () => this.screens.back() });
+    this.screens.register('mods', ModsScreen({ onBack: () => this.screens.back() }));
     this.screens.register('mainmenu', MainMenuScreen({
       onPlay: () => this.startGame(),
       onHelp: () => this.screens.push('help'),
       onSettings: () => { settingsScreen.refresh(); this.screens.push('settings'); },
+      onMods: () => this.screens.push('mods'),
     }));
     this.screens.register('pause', PauseScreen({
       onResume: () => this.resume(),
       onHelp: () => this.screens.push('help'),
       onSettings: () => { settingsScreen.refresh(); this.screens.push('settings'); },
+      onMods: () => this.screens.push('mods'),
       onQuit: () => this.quitToMenu(),
     }));
     this.screens.register('help', HelpScreen({ onBack: () => this.screens.back() }));
@@ -148,6 +154,7 @@ export class Game {
     this._refreshHud();
     this._lock();
     toast(STR.hud.hints);
+    events.emit('game:start');
   }
 
   pause() {
@@ -156,6 +163,7 @@ export class Game {
     this.spawnMenu.close();
     this.screens.setBackdrop('dim');
     this.screens.show('pause');
+    events.emit('game:pause');
   }
 
   resume() {
@@ -163,6 +171,7 @@ export class Game {
     this.screens.setBackdrop('none');
     this.screens.hideAll();
     this._lock();
+    events.emit('game:resume');
   }
 
   quitToMenu() {
@@ -172,12 +181,30 @@ export class Game {
     this.hud.hide();
     this.screens.setBackdrop('menu');
     this.screens.show('mainmenu');
+    events.emit('game:quit');
+  }
+
+  /** True while the Q menu or a mod overlay needs the mouse. */
+  get uiOpen() { return this.spawnMenu.isOpen || this.cursorHolds > 0; }
+
+  /** Leaves pointer lock without pausing. Returns release(), which locks the mouse again. */
+  freeCursor() {
+    this.cursorHolds++;
+    document.exitPointerLock();
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.cursorHolds--;
+      this._menuClosedAt = performance.now();
+      if (this.state === 'playing' && !this.paused && !this.uiOpen) this._lock();
+    };
   }
 
   _lock() {
     const p = this.canvas.requestPointerLock();
     p?.catch?.(() => {
-      if (this.state !== 'playing' || this.paused || this.spawnMenu.isOpen) return;
+      if (this.state !== 'playing' || this.paused || this.uiOpen) return;
       if (this._inMenuGrace()) this._armRelock(); else this.pause();
     });
   }
@@ -193,7 +220,7 @@ export class Game {
     toast(STR.hud.clickToResume);
     this.canvas.addEventListener('mousedown', () => {
       this._relockArmed = false;
-      if (this.state === 'playing' && !this.paused && !this.spawnMenu.isOpen) this._lock();
+      if (this.state === 'playing' && !this.paused && !this.uiOpen) this._lock();
     }, { once: true });
   }
 
@@ -201,15 +228,17 @@ export class Game {
   _bindInput() {
     document.addEventListener('pointerlockchange', () => {
       this.input.locked = document.pointerLockElement === this.canvas;
-      if (this.input.locked || this.state !== 'playing' || this.paused || this.spawnMenu.isOpen) return;
+      if (this.input.locked || this.state !== 'playing' || this.paused || this.uiOpen) return;
       if (this._inMenuGrace()) this._armRelock();
       else this.pause();
     });
     document.addEventListener('pointerlockerror', () => {
-      if (this.state !== 'playing' || this.paused || this.spawnMenu.isOpen) return;
+      if (this.state !== 'playing' || this.paused || this.uiOpen) return;
       if (this._inMenuGrace()) this._armRelock(); else this.pause();
     });
 
+    this.input.events.on('keydown', e => events.emit('game:keydown', e));
+    this.input.events.on('keyup', e => events.emit('game:keyup', e));
     this.input.events.on('keydown', ({ code, repeat }) => {
       if (repeat || this.state !== 'playing' || this.paused) return;
       if (code === 'KeyQ') {
@@ -221,7 +250,7 @@ export class Game {
         }
       } else if (code === 'Escape' && this.spawnMenu.isOpen) {
         this._closeMenuByEsc();
-      } else if (code === 'KeyR' && !this.spawnMenu.isOpen) {
+      } else if (code === 'KeyR' && !this.uiOpen) {
         this.removeAimed();
       }
     });
@@ -301,6 +330,7 @@ export class Game {
     this.player.update(dt, this.input, this.world);
     this.world.update(dt, { player: this.player, camera: this.camera });
     this._voidCheck();
+    events.emit('game:update', dt);
 
     if (this.player.frozen) {
       this.respawnTimer -= dt;
@@ -333,6 +363,7 @@ export class Game {
   _onCaught(bot) {
     this.stats.caught++;
     this.stats.survived = 0;
+    events.emit('game:caught', bot);
     this.player.die(bot.s.x, bot.s.z);
     this.respawnTimer = CONFIG.catchState.respawnDelay;
     this.hud.showCaught(bot.displayName);

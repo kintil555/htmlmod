@@ -20,6 +20,8 @@ class SettingsStore {
     if (this._defs.has(def.id)) throw new Error(`Duplicate setting "${def.id}"`);
     this._defs.set(def.id, def);
   }
+  /** Removes a definition (used by mods on unload). The stored value is kept. */
+  undefine(id) { this._defs.delete(id); }
   all() { return [...this._defs.values()]; }
   get(id) {
     const d = this._defs.get(id);

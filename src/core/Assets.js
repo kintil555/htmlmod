@@ -24,6 +24,12 @@ export const Assets = {
     }
     return pending.get(url);
   },
+  /** Disposes and forgets a texture (mods call this when they unload). */
+  release(url) {
+    done.get(url)?.dispose();
+    done.delete(url);
+    pending.delete(url);
+  },
   get(url) {
     const t = done.get(url);
     if (!t) throw new Error(`Texture not preloaded: ${url}`);
