@@ -69,6 +69,15 @@ function waveField(p) {
   return { h, gx, gz, sx, sz };
 }
 
+/** Wave amplitude factor by depth: waves shrink in the shallows but keep `shoreKeep` right at the bank, so the surface still reaches it. */
+const ampByDepth = d => smoothstep(0, W.waves.shoreFade, d).mul(1 - W.waves.shoreKeep).add(W.waves.shoreKeep);
+
+/** Swash: slow surges that run up the bank and drain back, only in the shallows and over the shore (zero in open water). */
+const swashAt = (p, d) => {
+  const w = sin(tU.mul(W.waves.swashSpeed).add(p.x.mul(0.37)).add(p.y.mul(0.23))).mul(0.5).add(0.5);
+  return w.mul(w).mul(W.waves.swash).mul(float(1).sub(smoothstep(W.waves.shoreFade * 0.5, W.waves.shoreFade * 2, d)));
+};
+
 function buildMaterial() {
   const p = positionWorld.xz;
   const toCam = cameraPosition.sub(positionWorld);
@@ -79,7 +88,8 @@ function buildMaterial() {
 
   // Waves: directional sines give height and slope (the same sum drives the vertex displacement and the normal), plus a noise detail
   // layer on the normal only. Everything fades out towards the shore (no waves on land) and with distance (less shimmer).
-  const fade = smoothstep(0, W.waves.shoreFade, texture(depthTex, wuv).r);
+  const depth = texture(depthTex, wuv).r;
+  const fade = ampByDepth(depth);
   const wave = waveField(p);
   let gx = wave.gx; let gz = wave.gz;
   const f = W.waves.detailScale; const e = 0.12;
@@ -100,9 +110,11 @@ function buildMaterial() {
   const cosV = saturate(dot(nF, viewW));
 
   // Depth: clarity and colour. Shallow = see-through, deep = darker and more opaque.
-  const depth = texture(depthTex, wuv).r;
-  const body = float(1).sub(exp(depth.mul(-W.absorb)));
-  const tint = float(1).sub(exp(depth.mul(-W.colorDepth)));
+  // Real water thickness over the bank/floor = baked signed depth + how far the surface is lifted here (waves, ripples, swash).
+  const lift = wave.h.add(texture(simTex, wuv).r.mul(W.waves.splashGain)).mul(fade).add(swashAt(p, depth));
+  const thick = max(depth.add(lift), 0);
+  const body = float(1).sub(exp(thick.mul(-W.absorb)));
+  const tint = float(1).sub(exp(thick.mul(-W.colorDepth)));
   const bodyColor = lerp(vec3(color(W.color.shallow)), vec3(color(W.color.deep)), tint);
   const fres = pow(float(1).sub(cosV), 5).mul(0.98).add(0.02);
 
@@ -112,10 +124,9 @@ function buildMaterial() {
   const fine = mx_noise_float(vec3(p.x.mul(W.foam.fineScale), p.y.mul(W.foam.fineScale), time.mul(0.6))).mul(0.5).add(0.5);
   const lap = sin(time.mul(W.foam.shoreSpeed).add(slow.mul(6.2832))).mul(0.35).add(0.65);
   const edge = lap.mul(W.foam.shoreWidth);
-  const shore = float(1).sub(smoothstep(edge.mul(0.3), edge, depth)).mul(smoothstep(0.25, 0.6, fine));
+  const shore = float(1).sub(smoothstep(edge.mul(0.3), edge, thick)).mul(smoothstep(0.25, 0.6, fine));
   const splash = smoothstep(0.1, 0.6, texture(simTex, wuv).g.mul(fine.mul(0.8).add(0.6)));
   // Crest foam: the highest parts of waves and splashes break white.
-  const lift = wave.h.add(texture(simTex, wuv).r.mul(W.waves.splashGain)).mul(fade);
   const crest = smoothstep(W.foam.crestStart, W.foam.crestEnd, lift).mul(smoothstep(0.35, 0.7, fine));
   const foam = max(max(shore, splash), crest);
 
@@ -128,7 +139,8 @@ function buildMaterial() {
   const glitter = vec3(sunColor.r, sunColor.g, sunColor.b).mul(glint).mul(SkyAmbient.specular).mul(select(below, float(0), float(1)));
 
   const aboveColor = lerp(bodyColor, vec3(color(W.color.foam)), foam);
-  const aboveOpacity = max(max(body.mul(W.maxOpacity - W.minOpacity).add(W.minOpacity), fres), max(foam.mul(W.foam.opacity), saturate(max(glitter.x, max(glitter.y, glitter.z)).mul(G.opacityGain))));
+  const thin = smoothstep(0, 0.06, thick);
+  const aboveOpacity = max(max(body.mul(W.maxOpacity - W.minOpacity).add(W.minOpacity), fres), max(foam.mul(W.foam.opacity), saturate(max(glitter.x, max(glitter.y, glitter.z)).mul(G.opacityGain)))).mul(thin);
 
   // From below: a clear window straight up, mirror-like beyond the critical angle.
   const tir = float(1).sub(smoothstep(U.windowCos[0], U.windowCos[1], cosV));
@@ -143,9 +155,10 @@ function buildMaterial() {
   // Vertex displacement: waves + the simulated ripples/splashes lift the (subdivided) surface; local y is world y up to the map scale.
   const wp = modelWorldMatrix.mul(vec4(positionLocal, 1)).xyz;
   const uvV = wp.xz.sub(origin).mul(invSize);
-  const fadeV = smoothstep(0, W.waves.shoreFade, texture(depthTex, uvV).level(0).r);
+  const dV = texture(depthTex, uvV).level(0).r;
+  const fadeV = ampByDepth(dV);
   const wv = waveField(wp.xz);
-  const liftV = wv.h.add(texture(simTex, uvV).level(0).r.mul(W.waves.splashGain)).mul(fadeV);
+  const liftV = wv.h.add(texture(simTex, uvV).level(0).r.mul(W.waves.splashGain)).mul(fadeV).add(swashAt(wp.xz, dV));
   material.positionNode = positionLocal.add(vec3(wv.sx.mul(fadeV), liftV, wv.sz.mul(fadeV)).mul(invScale));
   // Indoor pools must not mirror a sky they cannot see: the Fresnel reflection follows sky visibility.
   material.aoNode = SkyAmbient.node;
@@ -153,7 +166,7 @@ function buildMaterial() {
   return material;
 }
 
-/** Bilinear depth at world (x, z); 0 outside the pool. */
+/** Bilinear signed depth at world (x, z): water depth, negative on the bank (how far it is above the surface); 0 outside the pool. */
 function depthAt(x, z) {
   if (!S.ready) return 0;
   const fx = (x - S.info.minX) / S.cell - 0.5; const fz = (z - S.info.minZ) / S.cell - 0.5;
@@ -185,7 +198,10 @@ function surfaceAt(x, z) {
   }
   h += gridAt(S.sim.a, x, z) * W.waves.splashGain;
   const t = Math.min(1, d / W.waves.shoreFade);
-  return S.info.y + h * t * t * (3 - 2 * t);
+  const amp = W.waves.shoreKeep + (1 - W.waves.shoreKeep) * t * t * (3 - 2 * t);
+  const sw = Math.sin(S.t * W.waves.swashSpeed + x * 0.37 + z * 0.23) * 0.5 + 0.5;
+  const u = Math.max(0, Math.min(1, (d - W.waves.shoreFade * 0.5) / (W.waves.shoreFade * 1.5)));
+  return S.info.y + h * amp + sw * sw * W.waves.swash * (1 - u * u * (3 - 2 * u));
 }
 
 /**
@@ -257,7 +273,7 @@ export const Water = {
     for (let j = 0; j < nz; j++) {
       for (let i = 0; i < nx; i++) {
         const g = collision.groundHeight(info.minX + (i + 0.5) * cell, info.minZ + (j + 0.5) * cell, 0.05, info.y + W.landReach, 0);
-        raw[j * nx + i] = g > info.y ? 0 : Math.min(W.maxDepth, info.y - g);
+        raw[j * nx + i] = g > info.y ? Math.max(-W.landReach, info.y - g) : Math.min(W.maxDepth, info.y - g);
       }
     }
     const depth = blur3(raw, nx, nz);
@@ -274,7 +290,7 @@ export const Water = {
     cellU.value = cell;
     invScale.value = 1 / info.scale;
     Object.assign(S, { info, nx, nz, cell, depth });
-    S.sim = new WaterSim({ nx, nz, cell, depth, ...CONFIG.water.sim });
+    S.sim = new WaterSim({ nx, nz, cell, depth: depth.map(d => Math.max(0, d)), ...CONFIG.water.sim });
     S.ready = true;
   },
 

@@ -140,6 +140,8 @@ export const CONFIG = {
    * minDepth is the least depth that still counts as water for swimming and ripples).
    * absorb: how fast the body turns opaque with depth; colorDepth: shallow->deep colour blend; minOpacity/maxOpacity: clarity at 0 / full depth.
    * waves.layers: [dirX, dirZ, wavenumber, speed, amplitude] sine waves that raise/lower the surface (vertex displacement) and tilt the normal.
+   * shoreKeep: share of the wave height kept right at the shore; swash/swashSpeed: height and rate of the surges that wash up the bank and
+   * pull back (the waterline moves with the real water thickness = baked signed depth + lift; land depth is negative = how far the bank is above the surface).
    * splashGain: how much the simulated ripples/splashes lift the surface; shoreFade: depth over which waves grow from nothing at the shore; meshCell: water mesh grid size.
    * sim: speed = ripple travel speed; shoreDamp/deepDamp = per-step energy kept in the shallows / open water; limit = max |height|.
    * waves.choppy: Gerstner sharpening of crests. ripple: wake = push per second per unit of speed, laid along the path as a bow wave (bow = share raised in front) with a trough behind (V wake);
@@ -154,7 +156,7 @@ export const CONFIG = {
     color: { shallow: 0x58c4c0, deep: 0x0a3d5c, foam: 0xf4fbff },
     absorb: 0.11, colorDepth: 0.22, minOpacity: 0.16, maxOpacity: 0.93, roughness: 0.1,
     waves: {
-      rippleGain: 1.2, splashGain: 2.5, choppy: 1.2, shoreFade: 1.2, meshCell: 0.75, detail: 0.035, detailScale: 1.9, fadeNear: 40, fadeFar: 160, farKeep: 0.4,
+      rippleGain: 1.2, splashGain: 2.5, choppy: 1.2, shoreFade: 1.2, shoreKeep: 0.45, swash: 0.3, swashSpeed: 0.8, meshCell: 0.75, detail: 0.035, detailScale: 1.9, fadeNear: 40, fadeFar: 160, farKeep: 0.4,
       layers: [
         [1, 0.2, 0.31, 0.9, 0.225], [-0.6, 1, 0.47, 1.1, 0.175], [0.3, -1, 0.83, 1.5, 0.11],
         [-1, -0.5, 1.3, 1.9, 0.075], [0.8, 0.7, 2.1, 2.4, 0.045], [-0.2, 1, 3.4, 3, 0.025],
