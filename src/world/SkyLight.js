@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { texture, vec2, vec3, float, positionWorld, normalWorld, smoothstep, mix } from 'three/tsl';
+import { texture, vec2, positionWorld, normalWorld, smoothstep, mix } from 'three/tsl';
 import { CONFIG } from '../config.js';
 
 /**
@@ -8,6 +8,31 @@ import { CONFIG } from '../config.js';
  * tunnels and overhangs lose sky ambient light while the open ground and roofs keep it. Sun light is untouched
  * (it is shadow mapped), only ambient/hemisphere/sky reflection is scaled, through the material's `aoNode`.
  */
+
+/** One box-blur pass along rows (stride 1) or columns (stride n), edge clamped, O(1) per cell via a sliding sum. */
+function boxBlur(src, dst, w, h, w0, vertical) {
+  const len = vertical ? h : w; const lines = vertical ? w : h; const step = vertical ? w : 1; const lineStep = vertical ? 1 : w;
+  const inv = 1 / (2 * w0 + 1);
+  for (let l = 0; l < lines; l++) {
+    const o = l * lineStep;
+    let sum = 0;
+    for (let k = -w0; k <= w0; k++) sum += src[o + Math.min(len - 1, Math.max(0, k)) * step];
+    for (let i = 0; i < len; i++) {
+      dst[o + i * step] = sum * inv;
+      sum += src[o + Math.min(len - 1, i + w0 + 1) * step] - src[o + Math.max(0, i - w0) * step];
+    }
+  }
+}
+
+/** Gaussian-like blur (three box passes each way) with standard deviation `sigma` cells. Smooths the grid out of the roof field. */
+function blurField(field, nx, nz, sigma) {
+  const w0 = Math.max(1, Math.round((Math.sqrt(4 * sigma * sigma + 1) - 1) / 2));
+  const tmp = new Float32Array(field.length);
+  for (let pass = 0; pass < 3; pass++) {
+    boxBlur(field, tmp, nx, nz, w0, false);
+    boxBlur(tmp, field, nx, nz, w0, true);
+  }
+}
 
 /** meshes: THREE.Mesh list in a space where `scale` maps local units to world. Returns the roof-height field. */
 export function buildRoofField(meshes, scale, bounds) {
@@ -55,6 +80,9 @@ export function buildRoofField(meshes, scale, bounds) {
     }
   }
 
+  // Blur: the border between open sky and roof becomes a smooth ramp (no grid steps), sampled with one linear tap in the shader.
+  blurField(roof, nx, nz, S.blur / cell / 2);
+
   const half = new Uint16Array(roof.length);
   for (let i = 0; i < roof.length; i++) half[i] = THREE.DataUtils.toHalfFloat(roof[i]);
   const tex = new THREE.DataTexture(half, nx, nz, THREE.RedFormat, THREE.HalfFloatType);
@@ -69,17 +97,9 @@ export function buildRoofField(meshes, scale, bounds) {
 export function skyAmbientNode(field) {
   const S = CONFIG.lighting.skylight;
   // Test a point just off the surface along its normal: ceilings test below themselves, outer walls test outside.
-  const base = positionWorld.add(normalWorld.mul(S.offset));
-  // Several taps over a disc of radius `blur` average the roof test, so the lit/covered border is a soft gradient instead of grid steps.
-  const taps = [[0, 0]];
-  for (let i = 0; i < 4; i++) taps.push([Math.cos(i * Math.PI / 2 + 0.4) * 0.5, Math.sin(i * Math.PI / 2 + 0.4) * 0.5]);
-  for (let i = 0; i < 8; i++) taps.push([Math.cos(i * Math.PI / 4), Math.sin(i * Math.PI / 4)]);
-  let open = float(0);
-  for (const [dx, dz] of taps) {
-    const p = base.add(vec3(dx * S.blur, 0, dz * S.blur));
-    const uv = vec2(p.x.sub(field.minX).div(field.sizeX), p.z.sub(field.minZ).div(field.sizeZ));
-    const roofY = texture(field.texture, uv).r.mul(field.rangeY).add(field.minY);
-    open = open.add(smoothstep(0, S.softness, p.y.sub(roofY).add(S.margin)));
-  }
-  return mix(S.minAmbient, 1, open.div(taps.length));
+  const p = positionWorld.add(normalWorld.mul(S.offset));
+  const uv = vec2(p.x.sub(field.minX).div(field.sizeX), p.z.sub(field.minZ).div(field.sizeZ));
+  const roofY = texture(field.texture, uv).r.mul(field.rangeY).add(field.minY);
+  const open = smoothstep(0, S.softness, p.y.sub(roofY).add(S.margin));
+  return mix(S.minAmbient, 1, open);
 }
