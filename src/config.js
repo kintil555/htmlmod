@@ -85,8 +85,13 @@ export const CONFIG = {
     sky: { turbidity: 3, rayleigh: 1.2, mieCoefficient: 0.004, mieDirectionalG: 0.82, scale: 450000, clouds: { coverage: 0.5, density: 0.55, elevation: 0.5 } },
     environmentIntensity: 0.1,
     hemisphere: { sky: 0xffe2bd, ground: 0x8a6c4f, intensity: 0.42 },
-    /** Sun shadow window: `extent` = half its width in world units. 0 = the window covers the whole map (dynamic shadows everywhere, redrawn every frame); > 0 = smaller, sharper window that follows the player. */
-    shadow: { mapSize: 4096, extent: 0, bias: -0.00015, normalBias: 0.04, radius: 5 },
+    /**
+     * Sun shadows are cascaded shadow maps (three/addons/csm): `cascades` maps of `mapSize`, splitting the view out to `maxFar`
+     * world units (nearest cascade is the sharpest). `lightMargin` must exceed the map's height. Bias is a fraction of the
+     * shadow depth range (about lightMargin + 2 * maxFar), normalBias is in world units. `fade` blends between cascades.
+     * `rays` is the separate whole-map shadow map the god rays march through.
+     */
+    shadow: { cascades: 4, mapSize: 3072, maxFar: 200, lightMargin: 120, bias: -0.00002, normalBias: 0.04, radius: 2, fade: true, rays: { mapSize: 2048, bias: -0.0004, normalBias: 0.12, radius: 2 } },
     fog: { color: 0xd9d7cd, density: 0.0016 },
     /** Fallback surface for map materials that match nothing in `surfaces`. */
     material: { roughness: 0.9, metalness: 0 },

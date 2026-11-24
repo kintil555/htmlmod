@@ -68,7 +68,7 @@ export class Game {
     this.world = new World(buildMap(mapData));
     await this.world.buildNav(progress(STR.loadingStage.nav, S.map, S.nav));
     this.env = new Environment(this.renderer, this.world.scene, this.world.bounds);
-    this.fx = new PostFx(this.renderer, this.world.scene, this.camera, this.env.sun, this.env.sunDir);
+    this.fx = new PostFx(this.renderer, this.world.scene, this.camera, this.env.rayLight, this.env.sunDir);
     this.fx.setSunEffects(Settings.get('sunEffects'));
     Settings.events.on('change', ({ id, value }) => { if (id === 'sunEffects') this.fx.setSunEffects(value); });
     await this._warmUp(progress(STR.loadingStage.shaders, S.nav, 1));
@@ -120,7 +120,6 @@ export class Game {
     await this.renderer.compileAsync(this.world.scene, this.camera);
     onProgress(0.9);
     this.camera.position.set(this.world.spawn.x, this.world.spawn.y + CONFIG.player.eyeHeight, this.world.spawn.z);
-    this.env.followShadow(this.camera.position);
     this.fx.render();
     await frame();
     this.fx.render();
@@ -292,7 +291,6 @@ export class Game {
     this.lastT = t;
     if (this.state !== 'playing') return;
     if (!this.paused) this._update(dt);
-    this.env.followShadow(this.camera.position);
     this.fx.render();
   }
 

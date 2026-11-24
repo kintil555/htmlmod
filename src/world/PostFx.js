@@ -10,13 +10,13 @@ import { fxaa } from 'three/addons/tsl/display/FXAANode.js';
 import { CONFIG } from '../config.js';
 
 /**
- * Frame pipeline (TSL). Scene (+ normals) -> GTAO -> [god rays (raymarched through the sun's shadow map) + sun glow + lens flare +
+ * Frame pipeline (TSL). Scene (+ normals) -> GTAO -> [god rays (raymarched through the whole-map shadow map of `rayLight`) + sun glow + lens flare +
  * bloom] -> tone mapping -> FXAA. With sun effects off the same pipeline runs without the sun passes, so the
- * antialiasing and tone mapping stay identical. Needs shadows enabled and a shadow-casting sun.
+ * antialiasing and tone mapping stay identical. Needs shadows enabled and a shadow-casting `rayLight` (Environment).
  * All numbers come from CONFIG.lighting.sunFx.
  */
 export class PostFx {
-  constructor(renderer, scene, camera, sun, sunDir) {
+  constructor(renderer, scene, camera, rayLight, sunDir) {
     const L = CONFIG.lighting;
     const F = L.sunFx;
     this.pipeline = new THREE.RenderPipeline(renderer);
@@ -42,7 +42,7 @@ export class PostFx {
 
     // God rays: depth-aware march through the shadow map, bilateral blur, edge-aware composite tinted by the sun.
     const G = F.godrays;
-    const rays = godrays(sceneDepth, camera, sun);
+    const rays = godrays(sceneDepth, camera, rayLight);
     rays.raymarchSteps.value = G.steps;
     rays.density.value = G.density;
     rays.maxDensity.value = G.maxDensity;

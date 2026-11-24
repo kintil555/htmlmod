@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
+import { CSMShadowNode } from 'three/addons/csm/CSMShadowNode.js';
 import { CONFIG } from '../config.js';
 
 const TONE = {
@@ -10,9 +11,9 @@ const TONE = {
 };
 
 /**
- * Daylight: analytic sky dome, sun with one static shadow map fitted to the map, image-based ambient light
+ * Daylight: analytic sky dome, sun with cascaded shadow maps, image-based ambient light
  * baked from the sky, hemisphere fill, fog and tone mapping. All numbers come from CONFIG.lighting.
- * The sun shadow map is redrawn every frame around the player (`followShadow`), so moving props and bots cast shadows too.
+ * The cascades are redrawn every frame around the camera, so moving props and bots cast shadows too.
  * Needs an initialised WebGPURenderer (`await renderer.init()`).
  */
 export class Environment {
@@ -59,51 +60,46 @@ export class Environment {
 
   _makeSun(scene, bounds, sunDir) {
     const L = CONFIG.lighting;
-    const sun = new THREE.DirectionalLight(L.sun.color, L.sun.intensity);
-    scene.add(sun, sun.target);
-
-    // The shadow map is a small window (2 * extent wide) that follows the player: far sharper than one map fitted to
-    // the whole level. Depth range covers the tallest geometry between the sun and the window.
     const S = L.shadow;
-    this._shadowDist = Math.hypot(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY, bounds.maxZ - bounds.minZ);
-    // extent 0: the window is the map's bounding sphere, so every place is shadowed and nothing has to follow the player.
-    this._fit = !(S.extent > 0);
-    this._extent = this._fit ? this._shadowDist / 2 : S.extent;
-    this._mapCenter = new THREE.Vector3((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2, (bounds.minZ + bounds.maxZ) / 2);
-    const half = Math.max(this._extent, bounds.maxY - bounds.minY);
-    const cam = sun.shadow.camera;
-    cam.left = -this._extent; cam.right = this._extent; cam.bottom = -this._extent; cam.top = this._extent;
-    cam.near = this._shadowDist - half; cam.far = this._shadowDist + half;
-    cam.updateProjectionMatrix();
+    const size = Math.hypot(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY, bounds.maxZ - bounds.minZ);
+    const center = new THREE.Vector3((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2, (bounds.minZ + bounds.maxZ) / 2);
 
+    // The sun: cascaded shadow maps. Cascade 0 is a tight window right in front of the camera (sharp contact shadows),
+    // the later ones cover further and further out to `maxFar`, all re-fitted to the camera every frame.
+    const sun = new THREE.DirectionalLight(L.sun.color, L.sun.intensity);
+    sun.position.copy(center).addScaledVector(sunDir, size);
+    sun.target.position.copy(center);
+    scene.add(sun, sun.target);
     sun.castShadow = true;
     sun.shadow.mapSize.set(S.mapSize, S.mapSize);
     sun.shadow.bias = S.bias;
     sun.shadow.normalBias = S.normalBias;
     sun.shadow.radius = S.radius;
-    this._sunRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), sunDir).normalize();
-    this._sunUp = new THREE.Vector3().crossVectors(sunDir, this._sunRight);
-    this._center = new THREE.Vector3();
+    sun.shadow.camera.near = 0.5;
+    sun.shadow.camera.far = S.lightMargin + 2 * S.maxFar;
+    const csm = new CSMShadowNode(sun, { cascades: S.cascades, maxFar: S.maxFar, mode: 'practical', lightMargin: S.lightMargin });
+    csm.fade = S.fade;
+    sun.shadow.shadowNode = csm;
     this.sun = sun;
-    this.followShadow(this._mapCenter);
-    return sun;
-  }
 
-  /**
-   * Centers the shadow window on `point`. The centre is snapped to whole shadow texels in light space so shadow
-   * edges do not crawl while the player moves. Call every frame before rendering.
-   */
-  followShadow(point) {
-    const S = CONFIG.lighting.shadow;
-    if (this._fit) point = this._mapCenter;
-    const texel = 2 * this._extent / S.mapSize;
-    const x = Math.round(point.dot(this._sunRight) / texel) * texel;
-    const y = Math.round(point.dot(this._sunUp) / texel) * texel;
-    this._center.set(0, 0, 0)
-      .addScaledVector(this._sunRight, x)
-      .addScaledVector(this._sunUp, y)
-      .addScaledVector(this.sunDir, point.dot(this.sunDir));
-    this.sun.target.position.copy(this._center);
-    this.sun.position.copy(this._center).addScaledVector(this.sunDir, this._shadowDist);
+    // God rays march through one plain shadow map (they cannot read cascades): an invisible second sun (intensity 0)
+    // whose static window covers the whole map at low resolution.
+    const R = S.rays;
+    const ray = new THREE.DirectionalLight(0xffffff, 0);
+    const extent = size / 2;
+    ray.position.copy(center).addScaledVector(sunDir, size);
+    ray.target.position.copy(center);
+    scene.add(ray, ray.target);
+    ray.castShadow = true;
+    ray.shadow.mapSize.set(R.mapSize, R.mapSize);
+    ray.shadow.bias = R.bias;
+    ray.shadow.normalBias = R.normalBias;
+    ray.shadow.radius = R.radius;
+    const cam = ray.shadow.camera;
+    cam.left = -extent; cam.right = extent; cam.bottom = -extent; cam.top = extent;
+    cam.near = size - extent; cam.far = size + extent;
+    cam.updateProjectionMatrix();
+    this.rayLight = ray;
+    return sun;
   }
 }
