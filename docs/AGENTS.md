@@ -10,7 +10,7 @@ One game, one style. Everything is a library. **Extend, never duplicate.**
 5. No magic numbers for gameplay. Put them in `src/config.js`.
 6. Content is data in registries. Do not edit engine code to add content.
 7. Do not touch unrelated files. Do not leave TODOs or placeholders.
-8. Run `node test/logic.test.mjs` and `node test/nav.test.mjs` after touching `steering.js`, `Collision.js`, `NavGraph.js` or `colliders.js`; `node test/sky.test.mjs` after touching `HeightField.js`.
+8. Run `node test/logic.test.mjs` and `node test/nav.test.mjs` after touching `steering.js`, `Collision.js`, `NavGraph.js` or `colliders.js`; `node test/sky.test.mjs` after touching `HeightField.js`; `node test/mirror.test.mjs` after touching the vendored reflector patch.
 
 ## Recipes
 **Add a nextbot:** put `assets/nextbots/<id>.png` (transparent PNG), add one line to `src/content/nextbots.js`. It appears in the Q menu automatically.
@@ -33,7 +33,7 @@ One game, one style. Everything is a library. **Extend, never duplicate.**
 
 **Lighting/sky:** all numbers live in `CONFIG.lighting`; code is `world/Environment.js` (SkyMesh sky, sun, soft shadow window). The sun uses cascaded shadow maps (`CSMShadowNode`, `CONFIG.lighting.shadow`), redrawn every frame around the camera, so props and bots cast shadows and distant geometry is shadowed too. God rays read a separate whole-map shadow map from an invisible second light (`env.rayLight`).
 
-**Sky ambient + depth:** `world/SkyAmbient.js` bakes a top-down height field of the map (`world/HeightField.js`, pure data) and every map/prop material samples it as `aoNode`, so sky fill + environment light fade under roofs and indoors (`CONFIG.lighting.skyAmbient`, never touches the sun). Reversed depth buffer was tried and removed: it made surfaces flicker and blew out the ground (post passes and mirrors are not reliable with it); post passes use `isBackgroundDepth`. Sun disc glow is hard-masked by the sky mask so it cannot shine through geometry.
+**Sky ambient + depth:** `world/SkyAmbient.js` bakes a top-down height field of the map (`world/HeightField.js`, pure data) and every map/prop material samples it as `aoNode`, so sky fill + environment light fade under roofs and indoors (`CONFIG.lighting.skyAmbient`, never touches the sun). The renderer uses a reversed float depth buffer (`Game.boot()`, better precision, no distant z-fighting). Post passes must use `isBackgroundDepth` / `perspectiveDepthToViewZ`, never raw `depth >= 1` compares. Vendored three.js is patched in one place: `ReflectorBaseNode.updateBefore` (in `vendor/three.tsl.js` and `vendor/three.webgpu.nodes.js`) has a reversed-depth branch for the oblique mirror clip plane; without it glass/mirror panes render garbage and surfaces flicker (`test/mirror.test.mjs` checks the maths). Re-apply it when upgrading three.js. Sun disc glow is hard-masked by the sky mask so it cannot shine through geometry.
 
 **Surfaces / Fresnel:** map materials get roughness, metalness, Fresnel reflectance (`specular`) and sky-reflection strength from the first `CONFIG.lighting.surfaces` entry whose `match` hits the baked material name (`surfaceFor()` in `world/MapLoader.js`). Water and glass use a view-angle Fresnel (`world/Fresnel.js`): water turns opaque and reflective at grazing angles, glass blends from dark to fully mirrored. Add a class by adding one entry.
 

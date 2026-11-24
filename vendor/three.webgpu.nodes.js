@@ -40761,6 +40761,7 @@ const clipPlane = new Vector4();
 const _view = new Vector3();
 const _target = new Vector3();
 const _q = new Vector4();
+const _reflectorInverse = /*@__PURE__*/ new Matrix4();
 
 const _size$2 = new Vector2();
 
@@ -41254,6 +41255,7 @@ class ReflectorBaseNode extends Node {
 		//
 
 		virtualCamera.coordinateSystem = camera.coordinateSystem;
+		virtualCamera._reversedDepth = camera.reversedDepth;
 		virtualCamera.position.copy( _view );
 		virtualCamera.up.set( 0, 1, 0 );
 		virtualCamera.up.applyMatrix4( _rotationMatrix );
@@ -41280,21 +41282,39 @@ class ReflectorBaseNode extends Node {
 
 		const projectionMatrix = virtualCamera.projectionMatrix;
 
-		_q.x = ( Math.sign( clipPlane.x ) + projectionMatrix.elements[ 8 ] ) / projectionMatrix.elements[ 0 ];
-		_q.y = ( Math.sign( clipPlane.y ) + projectionMatrix.elements[ 9 ] ) / projectionMatrix.elements[ 5 ];
-		_q.z = -1;
-		_q.w = ( 1.0 + projectionMatrix.elements[ 10 ] ) / projectionMatrix.elements[ 14 ];
+		if ( camera.reversedDepth === true ) {
 
-		// Calculate the scaled plane vector
-		clipPlane.multiplyScalar( 1.0 / clipPlane.dot( _q ) );
+			// Reversed depth (1 at near, 0 at far): the oblique plane replaces the near plane through row2 = row3 + k * plane, with k
+			// chosen so the far-plane corner opposite the plane keeps depth 0. (The forward formulas below assume depth 0 at near.)
+			_q.set( Math.sign( clipPlane.x ), Math.sign( clipPlane.y ), 0, 1 ).applyMatrix4( _reflectorInverse.copy( projectionMatrix ).invert() );
 
-		const clipBias = 0;
+			const k = - 1.0 / clipPlane.dot( _q );
+			const e = projectionMatrix.elements;
 
-		// Replacing the third row of the projection matrix
-		projectionMatrix.elements[ 2 ] = clipPlane.x;
-		projectionMatrix.elements[ 6 ] = clipPlane.y;
-		projectionMatrix.elements[ 10 ] = ( renderer.coordinateSystem === WebGPUCoordinateSystem ) ? ( clipPlane.z - clipBias ) : ( clipPlane.z + 1.0 - clipBias );
-		projectionMatrix.elements[ 14 ] = clipPlane.w;
+			e[ 2 ] = e[ 3 ] + k * clipPlane.x;
+			e[ 6 ] = e[ 7 ] + k * clipPlane.y;
+			e[ 10 ] = e[ 11 ] + k * clipPlane.z;
+			e[ 14 ] = e[ 15 ] + k * clipPlane.w;
+
+		} else {
+
+			_q.x = ( Math.sign( clipPlane.x ) + projectionMatrix.elements[ 8 ] ) / projectionMatrix.elements[ 0 ];
+			_q.y = ( Math.sign( clipPlane.y ) + projectionMatrix.elements[ 9 ] ) / projectionMatrix.elements[ 5 ];
+			_q.z = -1;
+			_q.w = ( 1.0 + projectionMatrix.elements[ 10 ] ) / projectionMatrix.elements[ 14 ];
+
+			// Calculate the scaled plane vector
+			clipPlane.multiplyScalar( 1.0 / clipPlane.dot( _q ) );
+
+			const clipBias = 0;
+
+			// Replacing the third row of the projection matrix
+			projectionMatrix.elements[ 2 ] = clipPlane.x;
+			projectionMatrix.elements[ 6 ] = clipPlane.y;
+			projectionMatrix.elements[ 10 ] = ( renderer.coordinateSystem === WebGPUCoordinateSystem ) ? ( clipPlane.z - clipBias ) : ( clipPlane.z + 1.0 - clipBias );
+			projectionMatrix.elements[ 14 ] = clipPlane.w;
+
+		}
 
 		//
 
