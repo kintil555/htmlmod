@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
+import { vec4 } from 'three/tsl';
 import { CSMShadowNode } from 'three/addons/csm/CSMShadowNode.js';
 import { CONFIG } from '../config.js';
 
@@ -38,6 +39,12 @@ export class Environment {
     sky.cloudDensity.value = L.sky.clouds.density;
     sky.cloudElevation.value = L.sky.clouds.elevation;
     sky.sunPosition.value.copy(sunDir);
+    // SkyMesh pins its dome to the far plane with z = w, which is the NEAR plane under a reversed depth buffer: the sky would
+    // paint over geometry depending on draw order. Pin it to depth 0 (the reversed far plane) instead.
+    if (renderer.reversedDepthBuffer) {
+      const clip = sky.material.vertexNode;
+      sky.material.vertexNode = vec4(clip.xy, 0, clip.w);
+    }
 
     // Ambient light from the sky itself (no sun disc in the environment map).
     sky.showSunDisc.value = 0;
