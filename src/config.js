@@ -84,19 +84,19 @@ export const CONFIG = {
     sun: { elevation: 42, azimuth: 215, intensity: 3.2, color: 0xfff1dc },
     sky: { turbidity: 3, rayleigh: 1.2, mieCoefficient: 0.004, mieDirectionalG: 0.82, scale: 450000, clouds: { coverage: 0.5, density: 0.55, elevation: 0.5 } },
     environmentIntensity: 0.35,
-    hemisphere: { sky: 0xa9c8ff, ground: 0x7d705f, intensity: 0.3 },
-    /** Sun shadow window follows the player: `extent` = half its width in world units (smaller = sharper, but shorter range). */
-    shadow: { mapSize: 4096, extent: 36, bias: -0.00015, normalBias: 0.04, radius: 9 },
+    hemisphere: { sky: 0xa9c8ff, ground: 0x7d705f, intensity: 0.18 },
+    /** Sun shadow window: `extent` = half its width in world units. 0 = the window covers the whole map (shadows everywhere, static); > 0 = smaller, sharper window that follows the player. */
+    shadow: { mapSize: 4096, extent: 0, bias: -0.00015, normalBias: 0.04, radius: 5 },
     fog: { color: 0xc3d6ea, density: 0.0016 },
     /** Fallback surface for map materials that match nothing in `surfaces`. */
     material: { roughness: 0.9, metalness: 0 },
     /**
-     * minAmbient 1 = mask off (no second, blocky sky shadow); lower it (e.g. 0.2) to darken covered places again.
+     * `blur` (world units) is the radius the roof test is averaged over, so the edge of covered areas is soft. minAmbient 1 = mask off.
      * Ambient light that reaches covered places (rooms, tunnels, under overhangs). `minAmbient` is what stays
      * under a roof (0 = pitch black), `offset`/`margin`/`softness` are world units for the roof test, `resolution` the
      * roof-height grid cells across the longer side of the map.
      */
-    skylight: { minAmbient: 1, offset: 0.5, margin: 0.15, softness: 0.6, resolution: 1024 },
+    skylight: { minAmbient: 0.12, blur: 1.6, offset: 0.5, margin: 0.15, softness: 0.6, resolution: 1024 },
     /**
      * Surface classes, picked by the first `match` hitting the baked material name. roughness/metalness shape the
      * highlight; `specular` (0..1) is the Fresnel reflectance of non-metals (how much sky shows at grazing angles);

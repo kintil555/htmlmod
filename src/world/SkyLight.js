@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { texture, vec2, positionWorld, normalWorld, smoothstep, mix } from 'three/tsl';
+import { texture, vec2, vec3, float, positionWorld, normalWorld, smoothstep, mix } from 'three/tsl';
 import { CONFIG } from '../config.js';
 
 /**
@@ -69,9 +69,17 @@ export function buildRoofField(meshes, scale, bounds) {
 export function skyAmbientNode(field) {
   const S = CONFIG.lighting.skylight;
   // Test a point just off the surface along its normal: ceilings test below themselves, outer walls test outside.
-  const p = positionWorld.add(normalWorld.mul(S.offset));
-  const uv = vec2(p.x.sub(field.minX).div(field.sizeX), p.z.sub(field.minZ).div(field.sizeZ));
-  const roofY = texture(field.texture, uv).r.mul(field.rangeY).add(field.minY);
-  const open = smoothstep(0, S.softness, p.y.sub(roofY).add(S.margin));
-  return mix(S.minAmbient, 1, open);
+  const base = positionWorld.add(normalWorld.mul(S.offset));
+  // Several taps over a disc of radius `blur` average the roof test, so the lit/covered border is a soft gradient instead of grid steps.
+  const taps = [[0, 0]];
+  for (let i = 0; i < 4; i++) taps.push([Math.cos(i * Math.PI / 2 + 0.4) * 0.5, Math.sin(i * Math.PI / 2 + 0.4) * 0.5]);
+  for (let i = 0; i < 8; i++) taps.push([Math.cos(i * Math.PI / 4), Math.sin(i * Math.PI / 4)]);
+  let open = float(0);
+  for (const [dx, dz] of taps) {
+    const p = base.add(vec3(dx * S.blur, 0, dz * S.blur));
+    const uv = vec2(p.x.sub(field.minX).div(field.sizeX), p.z.sub(field.minZ).div(field.sizeZ));
+    const roofY = texture(field.texture, uv).r.mul(field.rangeY).add(field.minY);
+    open = open.add(smoothstep(0, S.softness, p.y.sub(roofY).add(S.margin)));
+  }
+  return mix(S.minAmbient, 1, open.div(taps.length));
 }

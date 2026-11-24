@@ -66,9 +66,13 @@ export class Environment {
     // the whole level. Depth range covers the tallest geometry between the sun and the window.
     const S = L.shadow;
     this._shadowDist = Math.hypot(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY, bounds.maxZ - bounds.minZ);
-    const half = Math.max(S.extent, bounds.maxY - bounds.minY);
+    // extent 0: the window is the map's bounding sphere, so every place is shadowed and nothing has to follow the player.
+    this._fit = !(S.extent > 0);
+    this._extent = this._fit ? this._shadowDist / 2 : S.extent;
+    this._mapCenter = new THREE.Vector3((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2, (bounds.minZ + bounds.maxZ) / 2);
+    const half = Math.max(this._extent, bounds.maxY - bounds.minY);
     const cam = sun.shadow.camera;
-    cam.left = -S.extent; cam.right = S.extent; cam.bottom = -S.extent; cam.top = S.extent;
+    cam.left = -this._extent; cam.right = this._extent; cam.bottom = -this._extent; cam.top = this._extent;
     cam.near = this._shadowDist - half; cam.far = this._shadowDist + half;
     cam.updateProjectionMatrix();
 
@@ -81,7 +85,7 @@ export class Environment {
     this._sunUp = new THREE.Vector3().crossVectors(sunDir, this._sunRight);
     this._center = new THREE.Vector3();
     this.sun = sun;
-    this.followShadow(new THREE.Vector3((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2, (bounds.minZ + bounds.maxZ) / 2));
+    this.followShadow(this._mapCenter);
     return sun;
   }
 
@@ -91,7 +95,8 @@ export class Environment {
    */
   followShadow(point) {
     const S = CONFIG.lighting.shadow;
-    const texel = 2 * S.extent / S.mapSize;
+    if (this._fit) point = this._mapCenter;
+    const texel = 2 * this._extent / S.mapSize;
     const x = Math.round(point.dot(this._sunRight) / texel) * texel;
     const y = Math.round(point.dot(this._sunUp) / texel) * texel;
     this._center.set(0, 0, 0)
