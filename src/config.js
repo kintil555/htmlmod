@@ -77,26 +77,19 @@ export const CONFIG = {
   },
   /** Loading bar slices (fractions of the whole bar): assets end, map end, navigation bake end; shaders take the rest. */
   loading: { assets: 0.08, map: 0.6, nav: 0.75, uploadBatch: 4 },
-  /** Sun, sky, ambient light, fog, tone mapping. Elevation/azimuth in degrees; azimuth 0 = +Z, 90 = +X. */
+  /** Like Source's light_environment: a warm directional sun with dynamic shadows plus a flat, warm skylight (hemisphere) as ambient; GTAO adds the contact darkness. Sun, sky, ambient light, fog, tone mapping. Elevation/azimuth in degrees; azimuth 0 = +Z, 90 = +X. */
   lighting: {
     toneMapping: 'neutral',
     exposure: 0.8,
-    sun: { elevation: 42, azimuth: 215, intensity: 3.2, color: 0xfff1dc },
+    sun: { elevation: 38, azimuth: 215, intensity: 3.4, color: 0xffdcae },
     sky: { turbidity: 3, rayleigh: 1.2, mieCoefficient: 0.004, mieDirectionalG: 0.82, scale: 450000, clouds: { coverage: 0.5, density: 0.55, elevation: 0.5 } },
-    environmentIntensity: 0.35,
-    hemisphere: { sky: 0xa9c8ff, ground: 0x7d705f, intensity: 0.18 },
-    /** Sun shadow window: `extent` = half its width in world units. 0 = the window covers the whole map (shadows everywhere, static); > 0 = smaller, sharper window that follows the player. */
+    environmentIntensity: 0.1,
+    hemisphere: { sky: 0xffe2bd, ground: 0x8a6c4f, intensity: 0.42 },
+    /** Sun shadow window: `extent` = half its width in world units. 0 = the window covers the whole map (dynamic shadows everywhere, redrawn every frame); > 0 = smaller, sharper window that follows the player. */
     shadow: { mapSize: 4096, extent: 0, bias: -0.00015, normalBias: 0.04, radius: 5 },
-    fog: { color: 0xc3d6ea, density: 0.0016 },
+    fog: { color: 0xd9d7cd, density: 0.0016 },
     /** Fallback surface for map materials that match nothing in `surfaces`. */
     material: { roughness: 0.9, metalness: 0 },
-    /**
-     * `voxel` (world units) is the size of the baked sky-openness volume: bigger = softer and cheaper. minAmbient 1 = mask off.
-     * Ambient light that reaches covered places (rooms, tunnels, under overhangs). `minAmbient` is what stays
-     * under a roof (0 = pitch black), `offset`/`margin`/`softness` are world units for the roof test, `resolution` the
-     * roof-height grid cells across the longer side of the map.
-     */
-    skylight: { minAmbient: 0.12, voxel: 1, offset: 0.5, margin: 0.15, softness: 0.6, resolution: 2048 },
     /**
      * Surface classes, picked by the first `match` hitting the baked material name. roughness/metalness shape the
      * highlight; `specular` (0..1) is the Fresnel reflectance of non-metals (how much sky shows at grazing angles);
@@ -126,7 +119,7 @@ export const CONFIG = {
       flare: { intensity: 0.18, threshold: 0.5, ghostSamples: 4, ghostSpacing: 0.3, ghostAttenuation: 25, downSample: 4, tint: 0xffe2b8 },
     },
     /** Ambient occlusion (GTAO). `radius` is in eye heights; `strength` 0 = off, 1 = full. Always on, not part of the sun effects toggle. */
-    ao: { radius: 0.35, thickness: 1, samples: 16, resolutionScale: 0.5, strength: 0.6 },
+    ao: { radius: 0.6, thickness: 1, samples: 16, resolutionScale: 0.5, strength: 0.9 },
     /** Water is clearest looking down and turns opaque, mirroring the sky, at grazing angles (Fresnel). */
     water: { color: 0x3d7d9c, opacity: 0.6, roughness: 0.05, power: 3 },
   },
