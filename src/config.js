@@ -94,11 +94,13 @@ export const CONFIG = {
      * is a tighter blob. `haze` is how much halo leaks over geometry (0 = only on open sky).
      */
     sunFx: {
-      godrays: { steps: 60, density: 0.7, maxDensity: 0.6, distanceAttenuation: 2, resolutionScale: 0.5, intensity: 1.2, edgeRadius: 2, edgeStrength: 2 },
-      bloom: { strength: 0.25, radius: 0.5, threshold: 1 },
-      glow: { disc: { power: 3000, intensity: 8 }, halo: { power: 40, intensity: 0.5 }, haze: 0.2 },
-      flare: { intensity: 0.3, threshold: 0.5, ghostSamples: 4, ghostSpacing: 0.3, ghostAttenuation: 25, downSample: 4, tint: 0xffe2b8 },
+      godrays: { steps: 60, density: 0.6, maxDensity: 0.45, distanceAttenuation: 2, resolutionScale: 0.5, intensity: 0.6, edgeRadius: 2, edgeStrength: 2 },
+      bloom: { strength: 0.05, radius: 0.4, threshold: 4 },
+      glow: { disc: { power: 3000, intensity: 6 }, halo: { power: 60, intensity: 0.2 }, haze: 0.08 },
+      flare: { intensity: 0.18, threshold: 0.5, ghostSamples: 4, ghostSpacing: 0.3, ghostAttenuation: 25, downSample: 4, tint: 0xffe2b8 },
     },
+    /** Ambient occlusion (GTAO). `radius` is in eye heights; `strength` 0 = off, 1 = full. Always on, not part of the sun effects toggle. */
+    ao: { radius: 0.35, thickness: 1, samples: 16, resolutionScale: 0.5, strength: 0.85 },
     water: { color: 0x3d7d9c, opacity: 0.72, roughness: 0.15 },
   },
   limits: { maxNextbots: 30, maxProps: 80 },

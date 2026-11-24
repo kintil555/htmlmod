@@ -1,15 +1,16 @@
 import * as THREE from 'three/webgpu';
-import { pass, renderOutput, uniform, color, vec4, float, screenUV, getViewPosition, normalize, dot, pow, max, step } from 'three/tsl';
+import { pass, mrt, output, normalView, mix, renderOutput, uniform, color, vec4, float, screenUV, getViewPosition, normalize, dot, pow, max, step } from 'three/tsl';
 import { godrays } from 'three/addons/tsl/display/GodraysNode.js';
 import { bilateralBlur } from 'three/addons/tsl/display/BilateralBlurNode.js';
 import { depthAwareBlend } from 'three/addons/tsl/display/depthAwareBlend.js';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { lensflare } from 'three/addons/tsl/display/LensflareNode.js';
+import { ao } from 'three/addons/tsl/display/GTAONode.js';
 import { fxaa } from 'three/addons/tsl/display/FXAANode.js';
 import { CONFIG } from '../config.js';
 
 /**
- * Frame pipeline (TSL). Scene -> [god rays (raymarched through the sun's shadow map) + sun glow + lens flare +
+ * Frame pipeline (TSL). Scene (+ normals) -> GTAO -> [god rays (raymarched through the sun's shadow map) + sun glow + lens flare +
  * bloom] -> tone mapping -> FXAA. With sun effects off the same pipeline runs without the sun passes, so the
  * antialiasing and tone mapping stay identical. Needs shadows enabled and a shadow-casting sun.
  * All numbers come from CONFIG.lighting.sunFx.
@@ -24,9 +25,20 @@ export class PostFx {
     const toScreen = node => fxaa(renderOutput(node, renderer.toneMapping, renderer.outputColorSpace));
 
     const scenePass = pass(scene, camera);
+    scenePass.setMRT(mrt({ output, normal: normalView }));
     const sceneColor = scenePass.getTextureNode('output');
+    const sceneNormal = scenePass.getTextureNode('normal');
     const sceneDepth = scenePass.getTextureNode('depth');
-    this.plain = toScreen(sceneColor);
+
+    // Ambient occlusion (GTAO) darkens creases and contact points so surfaces stop looking flat.
+    const A = L.ao;
+    const aoPass = ao(sceneDepth, sceneNormal, camera);
+    aoPass.resolutionScale = A.resolutionScale;
+    aoPass.radius.value = A.radius * CONFIG.player.eyeHeight;
+    aoPass.thickness.value = A.thickness;
+    aoPass.samples.value = A.samples;
+    const aoFactor = mix(1, aoPass.getTextureNode().sample(screenUV).r, A.strength);
+    this.plain = toScreen(vec4(sceneColor.rgb.mul(aoFactor), 1));
 
     // God rays: depth-aware march through the shadow map, bilateral blur, edge-aware composite tinted by the sun.
     const G = F.godrays;
@@ -72,7 +84,7 @@ export class PostFx {
     const B = F.bloom;
     const bloomPass = bloom(sceneColor, B.strength, B.radius, B.threshold);
 
-    const composite = withRays.add(bloomPass).add(glow).add(flare.mul(Fl.intensity));
+    const composite = withRays.mul(aoFactor).add(bloomPass).add(glow).add(flare.mul(Fl.intensity));
     this.full = toScreen(vec4(composite.rgb, 1));
     this.setSunEffects(true);
   }

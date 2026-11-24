@@ -33,7 +33,7 @@ One game, one style. Everything is a library. **Extend, never duplicate.**
 
 **Lighting/sky:** all numbers live in `CONFIG.lighting`; code is `world/Environment.js` (SkyMesh sky, sun, soft static shadow map). Shadows re-render only when a prop is added or removed (`entity.castsShadow = true` -> `env.markShadowsDirty()`).
 
-**Sun effects:** `world/PostFx.js` (TSL pipeline: god rays through the sun shadow map, sun glow, lens flare, bloom, tone mapping, FXAA). Tunables: `CONFIG.lighting.sunFx`. Players toggle it in Settings (`sunEffects`). The renderer is `WebGPURenderer` and falls back to its WebGL2 backend by itself; GLSL `ShaderMaterial` does not work with it, use node materials.
+**Sun effects + AO:** `world/PostFx.js` (TSL pipeline: GTAO ambient occlusion `CONFIG.lighting.ao`, god rays through the sun shadow map, sun glow, lens flare, bloom, tone mapping, FXAA). Tunables: `CONFIG.lighting.sunFx`. Players toggle it in Settings (`sunEffects`). The renderer is `WebGPURenderer` and falls back to its WebGL2 backend by itself; GLSL `ShaderMaterial` does not work with it, use node materials.
 
 **Add a new content file:** import it in `src/content/index.js`.
 
