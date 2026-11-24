@@ -21,7 +21,7 @@ export class Environment {
     renderer.toneMapping = TONE[L.toneMapping] ?? THREE.NoToneMapping;
     renderer.toneMappingExposure = L.exposure;
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
 
     const sunDir = new THREE.Vector3().setFromSphericalCoords(
       1, THREE.MathUtils.degToRad(90 - L.sun.elevation), THREE.MathUtils.degToRad(L.sun.azimuth));

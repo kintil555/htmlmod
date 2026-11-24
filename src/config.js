@@ -84,9 +84,9 @@ export const CONFIG = {
     sun: { elevation: 42, azimuth: 215, intensity: 3.2, color: 0xfff1dc },
     sky: { turbidity: 3, rayleigh: 1.2, mieCoefficient: 0.004, mieDirectionalG: 0.82, scale: 450000, clouds: { coverage: 0.5, density: 0.55, elevation: 0.5 } },
     environmentIntensity: 0.35,
-    hemisphere: { sky: 0xa9c8ff, ground: 0x7d705f, intensity: 0.12 },
+    hemisphere: { sky: 0xa9c8ff, ground: 0x7d705f, intensity: 0.3 },
     /** Sun shadow window follows the player: `extent` = half its width in world units (smaller = sharper, but shorter range). */
-    shadow: { mapSize: 4096, extent: 40, bias: -0.0001, normalBias: 0.03, radius: 3 },
+    shadow: { mapSize: 4096, extent: 36, bias: -0.00015, normalBias: 0.04, radius: 9 },
     fog: { color: 0xc3d6ea, density: 0.0016 },
     /** Fallback surface for map materials that match nothing in `surfaces`. */
     material: { roughness: 0.9, metalness: 0 },
@@ -95,7 +95,7 @@ export const CONFIG = {
      * under a roof (0 = pitch black), `offset`/`margin`/`softness` are world units for the roof test, `resolution` the
      * roof-height grid cells across the longer side of the map.
      */
-    skylight: { minAmbient: 0.06, offset: 0.5, margin: 0.15, softness: 0.6, resolution: 1024 },
+    skylight: { minAmbient: 0.2, offset: 0.5, margin: 0.15, softness: 0.6, resolution: 1024 },
     /**
      * Surface classes, picked by the first `match` hitting the baked material name. roughness/metalness shape the
      * highlight; `specular` (0..1) is the Fresnel reflectance of non-metals (how much sky shows at grazing angles);
@@ -125,7 +125,7 @@ export const CONFIG = {
       flare: { intensity: 0.18, threshold: 0.5, ghostSamples: 4, ghostSpacing: 0.3, ghostAttenuation: 25, downSample: 4, tint: 0xffe2b8 },
     },
     /** Ambient occlusion (GTAO). `radius` is in eye heights; `strength` 0 = off, 1 = full. Always on, not part of the sun effects toggle. */
-    ao: { radius: 0.35, thickness: 1, samples: 16, resolutionScale: 0.5, strength: 0.85 },
+    ao: { radius: 0.35, thickness: 1, samples: 16, resolutionScale: 0.5, strength: 0.6 },
     /** Water is clearest looking down and turns opaque, mirroring the sky, at grazing angles (Fresnel). */
     water: { color: 0x3d7d9c, opacity: 0.6, roughness: 0.05, power: 3 },
   },
