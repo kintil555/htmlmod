@@ -3,7 +3,7 @@ export const STR = {
   menu: { play: 'Play', help: 'Help', settings: 'Settings', resume: 'Resume', quit: 'Main Menu', back: 'Back' },
   loading: 'Loading…',
   loadingStage: { assets: 'Loading assets', map: 'Loading map', nav: 'Building navigation', shaders: 'Preparing graphics' },
-  settings: { title: 'Settings', empty: 'No options yet.' },
+  settings: { title: 'Settings', empty: 'No options yet.', graphics: 'Graphics', sunEffects: 'Sun effects (god rays, lens flare, glow)' },
   help: {
     title: 'Help',
     sections: [
@@ -42,5 +42,5 @@ export const STR = {
     clear: 'Clear All', nextbotLimit: 'Nextbot limit reached', propLimit: 'Prop limit reached',
     removed: name => `Removed ${name}`, nothingToRemove: 'Nothing to remove',
   },
-  errors: { webgl: 'WebGL is not available in this browser.' },
+  errors: { webgl: 'WebGPU or WebGL2 is not available in this browser.' },
 };

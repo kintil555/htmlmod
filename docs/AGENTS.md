@@ -3,7 +3,7 @@
 One game, one style. Everything is a library. **Extend, never duplicate.**
 
 ## Hard rules
-1. No build step, no new dependencies. Three.js is vendored in `vendor/` (r187). Import it as `import * as THREE from 'three'`.
+1. No build step, no new dependencies. Three.js is vendored in `vendor/` (r187). Import it as `import * as THREE from 'three'`; the renderer, node materials and anything TSL come from `three/webgpu` and `three/tsl` (same core, one instance).
 2. All UI is built from `src/ui/ui.js` components (`Button`, `Panel`, `Tabs`, `Card`, `SettingControl`, `toast`, `ScreenManager`). Need something new? Add a component there plus CSS in `src/ui/theme.css`.
 3. No raw colors, fonts, or pixel spacing outside the tokens at the top of `theme.css` (`--c-*`, `--s*`, `--font`).
 4. No user-facing text in code. Put it in `src/content/strings.js`.
@@ -29,15 +29,17 @@ One game, one style. Everything is a library. **Extend, never duplicate.**
 
 **Nextbot navigation:** automatic. `world/NavGraph.js` bakes a multi-level graph from the map's collision at load (walk, jump up, drop down edges; tunnels and roofs included), so a new map needs nothing extra. One shared flow field from the player gives every bot its next waypoint; bots jump ledges up to the jump apex. Tunables: `CONFIG.nextbot.nav`, `stepHeight`, `jumpSpeed`.
 
-**Mirrors:** any flat pane whose material name starts with `MIRROR` in `tools/bake_map.py` (default: `glassreflectiveglass`, `mirror`) is baked with `mirror: true` and rebuilt by `world/Mirror.js` as real planar `Reflector`s (one per plane, plus a back-side twin). No per-pane code. Tunables: `CONFIG.lighting.mirror`.
+**Mirrors:** any flat pane whose material name starts with `MIRROR` in `tools/bake_map.py` (default: `glassreflectiveglass`, `mirror`) is baked with `mirror: true` and rebuilt by `world/Mirror.js` as real planar TSL `reflector()` nodes (one per plane, plus a back-side twin). No per-pane code. Tunables: `CONFIG.lighting.mirror`.
 
-**Lighting/sky:** all numbers live in `CONFIG.lighting`; code is `world/Environment.js`. Shadows are static; they re-render only when a prop is added or removed (`entity.castsShadow = true`).
+**Lighting/sky:** all numbers live in `CONFIG.lighting`; code is `world/Environment.js` (SkyMesh sky, sun, soft static shadow map). Shadows re-render only when a prop is added or removed (`entity.castsShadow = true` -> `env.markShadowsDirty()`).
+
+**Sun effects:** `world/PostFx.js` (TSL pipeline: god rays through the sun shadow map, sun glow, lens flare, bloom, tone mapping, FXAA). Tunables: `CONFIG.lighting.sunFx`. Players toggle it in Settings (`sunEffects`). The renderer is `WebGPURenderer` and falls back to its WebGL2 backend by itself; GLSL `ShaderMaterial` does not work with it, use node materials.
 
 **Add a new content file:** import it in `src/content/index.js`.
 
 ## Layout
 - `core/` engine utilities: Events, Registry, Settings, Assets, Input
-- `world/` World, Collision (boxes with optional `bottom`), MapLoader, Environment (sky/sun), colliders decoder, procedural textures
+- `world/` World, Collision (boxes with optional `bottom`), MapLoader, Environment (sky/sun/shadows), PostFx (sun effects), colliders decoder, procedural textures
 - `tools/` build-time scripts (map baker), not shipped
 - `entities/` Entity, Player, Nextbot, Prop, steering (pure math)
 - `content/` data: nextbots, props, spawn tabs, settings, strings

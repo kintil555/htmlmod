@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { WebGPURenderer } from 'three/webgpu';
 import { CONFIG } from './config.js';
 import { STR } from './content/strings.js';
 import { NextbotRegistry, PropRegistry, MapRegistry } from './core/registries.js';
@@ -6,6 +7,8 @@ import { Assets } from './core/Assets.js';
 import { Input } from './core/Input.js';
 import { World } from './world/World.js';
 import { Environment } from './world/Environment.js';
+import { PostFx } from './world/PostFx.js';
+import { Settings } from './core/Settings.js';
 import { loadMapData, buildMap } from './world/MapLoader.js';
 import { Player } from './entities/Player.js';
 import { Nextbot } from './entities/Nextbot.js';
@@ -34,9 +37,11 @@ export class Game {
   }
 
   async boot() {
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
+    // WebGPU, with three.js' automatic WebGL2 fallback. Antialiasing is FXAA in PostFx, not MSAA.
+    this.renderer = new WebGPURenderer({ canvas: this.canvas, antialias: false, powerPreference: 'high-performance' });
+    await this.renderer.init();
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    Assets.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+    Assets.anisotropy = Math.min(8, this.renderer.getMaxAnisotropy());
     this.camera = new THREE.PerspectiveCamera(CONFIG.player.fov, 1, 0.1, 600);
     this._resize();
     window.addEventListener('resize', () => this._resize());
@@ -63,6 +68,9 @@ export class Game {
     this.world = new World(buildMap(mapData));
     await this.world.buildNav(progress(STR.loadingStage.nav, S.map, S.nav));
     this.env = new Environment(this.renderer, this.world.scene, this.world.bounds);
+    this.fx = new PostFx(this.renderer, this.world.scene, this.camera, this.env.sun, this.env.sunDir);
+    this.fx.setSunEffects(Settings.get('sunEffects'));
+    Settings.events.on('change', ({ id, value }) => { if (id === 'sunEffects') this.fx.setSunEffects(value); });
     await this._warmUp(progress(STR.loadingStage.shaders, S.nav, 1));
     this.input = new Input();
     this.input.attach();
@@ -97,7 +105,7 @@ export class Game {
 
   /**
    * Pays every first-use GPU cost behind the loading screen: texture upload, shader compilation (map, prop and
-   * nextbot materials) and the first shadow map. Nothing should hitch when the player presses Play.
+   * nextbot materials, post pipeline) and the first shadow map. Nothing should hitch when the player presses Play.
    */
   async _warmUp(onProgress) {
     const frame = () => new Promise(r => requestAnimationFrame(r));
@@ -112,8 +120,10 @@ export class Game {
     await this.renderer.compileAsync(this.world.scene, this.camera);
     onProgress(0.9);
     this.camera.position.set(this.world.spawn.x, this.world.spawn.y + CONFIG.player.eyeHeight, this.world.spawn.z);
-    this.renderer.shadowMap.needsUpdate = true;
-    this.renderer.render(this.world.scene, this.camera);
+    this.env.markShadowsDirty();
+    this.fx.render();
+    await frame();
+    this.fx.render();
     this.world.remove(bot);
     this.world.remove(prop);
     this.world.shadowDirty = true;
@@ -283,8 +293,8 @@ export class Game {
     this.lastT = t;
     if (this.state !== 'playing') return;
     if (!this.paused) this._update(dt);
-    if (this.world.shadowDirty) { this.renderer.shadowMap.needsUpdate = true; this.world.shadowDirty = false; }
-    this.renderer.render(this.world.scene, this.camera);
+    if (this.world.shadowDirty) { this.env.markShadowsDirty(); this.world.shadowDirty = false; }
+    this.fx.render();
   }
 
   _update(dt) {

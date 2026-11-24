@@ -8,7 +8,7 @@ ES modules need an HTTP server (not `file://`):
     python3 -m http.server 8080      # then open http://localhost:8080
     # or: npx serve .
 
-Use desktop Chrome/Edge/Firefox. Pointer lock requires a click on Play.
+Use desktop Chrome/Edge/Firefox. Renders with WebGPU (automatic WebGL2 fallback). Sun effects (god rays, lens flare, glow) toggle in Settings. Pointer lock requires a click on Play.
 
 ## Controls
 WASD move, Shift sprint, Space jump (sprint at a wall, jump, then tap Space again at the wall to wall-jump: aim with WASD/look to kick sideways or across, push into the wall to climb it), mouse look, hold/tap Q spawn menu, R remove aimed object, Esc pause.

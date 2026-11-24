@@ -17,8 +17,7 @@ function fail(message) {
 
 try {
   const probe = document.createElement('canvas');
-  const gl = probe.getContext('webgl2') || probe.getContext('webgl');
-  if (!gl) throw new Error(STR.errors.webgl);
+  if (!navigator.gpu && !probe.getContext('webgl2')) throw new Error(STR.errors.webgl);
   await new Game({ canvas, uiRoot }).boot();
 } catch (err) {
   fail(err.message);

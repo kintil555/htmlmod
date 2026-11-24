@@ -1,5 +1,5 @@
-import * as THREE from 'three';
-import { Reflector } from 'three/addons/objects/Reflector.js';
+import * as THREE from 'three/webgpu';
+import { reflector, vec4, color } from 'three/tsl';
 import { CONFIG } from '../config.js';
 
 const KEY_STEP = 0.02;
@@ -24,16 +24,14 @@ function planarGroups(pos, index) {
 }
 
 /**
- * Turns the triangles of a mirror material into planar Reflectors (three.js addon: renders the scene a second
- * time from the mirrored camera). Works for any flat glass/mirror pane at any orientation, one Reflector per plane,
- * plus a flipped twin so the pane also mirrors from its back. A Reflector only renders while it is on screen and
- * facing the camera, so unseen mirrors cost nothing. Geometry stays in the caller's local space.
+ * Turns the triangles of a mirror material into planar reflectors (TSL `reflector()` node: renders the scene a
+ * second time from the mirrored camera). Works for any flat glass/mirror pane at any orientation, one Reflector per plane,
+ * plus a flipped twin so the pane also mirrors from its back. A reflector only renders while its pane is drawn
+ * (on screen and front-facing), so unseen mirrors cost nothing. Geometry stays in the caller's local space.
  */
 export function buildMirrors(pos, index, name = 'mirror') {
   const M = CONFIG.lighting.mirror;
-  const dpr = Math.min(window.devicePixelRatio, 2);
-  const w = Math.min(M.maxSize, Math.round(window.innerWidth * dpr * M.resolution));
-  const h = Math.min(M.maxSize, Math.round(window.innerHeight * dpr * M.resolution));
+  const tint = color(M.color);
   const out = [];
   for (const g of planarGroups(pos, index)) {
     const origin = new THREE.Vector3();
@@ -52,7 +50,11 @@ export function buildMirrors(pos, index, name = 'mirror') {
       }
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-      const r = new Reflector(geo, { color: M.color, textureWidth: w, textureHeight: h, clipBias: M.clipBias, multisample: M.multisample });
+      const refl = reflector({ resolutionScale: M.resolution, bounces: false, samples: M.multisample });
+      const material = new THREE.MeshBasicNodeMaterial({ side: THREE.FrontSide });
+      material.colorNode = vec4(refl.rgb.mul(tint), 1);
+      const r = new THREE.Mesh(geo, material);
+      r.add(refl.target);
       r.name = name;
       r.position.copy(origin).addScaledVector(n, M.offset);
       r.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(tangent, bt, n));

@@ -1,4 +1,7 @@
 /**
  * Settings definitions go here (see core/Settings.js for the API).
- * Intentionally empty for now: the Settings screen shows a placeholder until options are added.
  */
+import { Settings } from '../core/Settings.js';
+import { STR } from './strings.js';
+
+Settings.define({ id: 'sunEffects', label: STR.settings.sunEffects, type: 'toggle', default: true, category: STR.settings.graphics });

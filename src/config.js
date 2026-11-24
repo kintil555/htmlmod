@@ -85,10 +85,20 @@ export const CONFIG = {
     sky: { turbidity: 3, rayleigh: 1.2, mieCoefficient: 0.004, mieDirectionalG: 0.82, scale: 450000, clouds: { coverage: 0.5, density: 0.55, elevation: 0.5 } },
     environmentIntensity: 0.5,
     hemisphere: { sky: 0xa9c8ff, ground: 0x7d705f, intensity: 0.12 },
-    shadow: { mapSize: 4096, bias: -0.0003, normalBias: 0.05 },
+    shadow: { mapSize: 4096, bias: -0.0003, normalBias: 0.05, radius: 2 },
     fog: { color: 0xc3d6ea, density: 0.0016 },
     material: { roughness: 0.9, metalness: 0 },
-    mirror: { color: 0xdbe6e6, resolution: 0.75, maxSize: 2048, clipBias: 0.003, multisample: 4, offset: 0.01 },
+    mirror: { color: 0xdbe6e6, resolution: 0.75, multisample: 4, offset: 0.01 },
+    /**
+     * Post effects around the sun (src/world/PostFx.js). Glow shapes are cos(angle to sun)^power: a higher power
+     * is a tighter blob. `haze` is how much halo leaks over geometry (0 = only on open sky).
+     */
+    sunFx: {
+      godrays: { steps: 60, density: 0.7, maxDensity: 0.6, distanceAttenuation: 2, resolutionScale: 0.5, intensity: 1.2, edgeRadius: 2, edgeStrength: 2 },
+      bloom: { strength: 0.25, radius: 0.5, threshold: 1 },
+      glow: { disc: { power: 3000, intensity: 8 }, halo: { power: 40, intensity: 0.5 }, haze: 0.2 },
+      flare: { intensity: 0.3, threshold: 0.5, ghostSamples: 4, ghostSpacing: 0.3, ghostAttenuation: 25, downSample: 4, tint: 0xffe2b8 },
+    },
     water: { color: 0x3d7d9c, opacity: 0.72, roughness: 0.15 },
   },
   limits: { maxNextbots: 30, maxProps: 80 },

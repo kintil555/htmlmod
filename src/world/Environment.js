@@ -1,5 +1,5 @@
-import * as THREE from 'three';
-import { Sky } from 'three/addons/objects/Sky.js';
+import * as THREE from 'three/webgpu';
+import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
 import { CONFIG } from '../config.js';
 
 const TONE = {
@@ -12,7 +12,8 @@ const TONE = {
 /**
  * Daylight: analytic sky dome, sun with one static shadow map fitted to the map, image-based ambient light
  * baked from the sky, hemisphere fill, fog and tone mapping. All numbers come from CONFIG.lighting.
- * Shadows are re-rendered only when `renderer.shadowMap.needsUpdate` is set (Game does that when props change).
+ * Shadows are re-rendered only when `markShadowsDirty()` is called (Game does that when props change).
+ * Needs an initialised WebGPURenderer (`await renderer.init()`).
  */
 export class Environment {
   constructor(renderer, scene, bounds) {
@@ -20,26 +21,25 @@ export class Environment {
     renderer.toneMapping = TONE[L.toneMapping] ?? THREE.NoToneMapping;
     renderer.toneMappingExposure = L.exposure;
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowMap;
-    renderer.shadowMap.autoUpdate = false;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const sunDir = new THREE.Vector3().setFromSphericalCoords(
       1, THREE.MathUtils.degToRad(90 - L.sun.elevation), THREE.MathUtils.degToRad(L.sun.azimuth));
+    this.sunDir = sunDir;
 
-    const sky = new Sky();
+    const sky = new SkyMesh();
     sky.scale.setScalar(L.sky.scale);
-    const u = sky.material.uniforms;
-    u.turbidity.value = L.sky.turbidity;
-    u.rayleigh.value = L.sky.rayleigh;
-    u.mieCoefficient.value = L.sky.mieCoefficient;
-    u.mieDirectionalG.value = L.sky.mieDirectionalG;
-    u.cloudCoverage.value = L.sky.clouds.coverage;
-    u.cloudDensity.value = L.sky.clouds.density;
-    u.cloudElevation.value = L.sky.clouds.elevation;
-    u.sunPosition.value.copy(sunDir);
+    sky.turbidity.value = L.sky.turbidity;
+    sky.rayleigh.value = L.sky.rayleigh;
+    sky.mieCoefficient.value = L.sky.mieCoefficient;
+    sky.mieDirectionalG.value = L.sky.mieDirectionalG;
+    sky.cloudCoverage.value = L.sky.clouds.coverage;
+    sky.cloudDensity.value = L.sky.clouds.density;
+    sky.cloudElevation.value = L.sky.clouds.elevation;
+    sky.sunPosition.value.copy(sunDir);
 
     // Ambient light from the sky itself (no sun disc in the environment map).
-    u.showSunDisc.value = 0;
+    sky.showSunDisc.value = 0;
     const envScene = new THREE.Scene();
     envScene.add(sky);
     const pmrem = new THREE.PMREMGenerator(renderer);
@@ -47,7 +47,7 @@ export class Environment {
     scene.environment = env.texture;
     scene.environmentIntensity = L.environmentIntensity;
     pmrem.dispose();
-    u.showSunDisc.value = 1;
+    sky.showSunDisc.value = 1;
     scene.add(sky);
     this.sky = sky;
 
@@ -85,6 +85,12 @@ export class Environment {
     sun.shadow.mapSize.set(L.shadow.mapSize, L.shadow.mapSize);
     sun.shadow.bias = L.shadow.bias;
     sun.shadow.normalBias = L.shadow.normalBias;
+    sun.shadow.radius = L.shadow.radius;
+    sun.shadow.autoUpdate = false;
+    sun.shadow.needsUpdate = true;
     return sun;
   }
+
+  /** The static sun shadow map is redrawn on the next frame (props added/removed). */
+  markShadowsDirty() { this.sun.shadow.needsUpdate = true; }
 }
