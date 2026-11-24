@@ -40,6 +40,9 @@ function makeMaterial(m, texture) {
       metalness: 0, depthWrite: false, side: THREE.DoubleSide,
     });
     water.opacityNode = mix(L.water.opacity, 1, fresnel(L.water.power));
+    // Indoor pools must not mirror a sky they cannot see: the Fresnel reflection follows sky visibility.
+    water.aoNode = SkyAmbient.node;
+    water.specularIntensityNode = SkyAmbient.specular;
     return water;
   }
   const surface = surfaceFor(m.name);
@@ -48,7 +51,6 @@ function makeMaterial(m, texture) {
     color: new THREE.Color().setRGB(m.color[0], m.color[1], m.color[2]),
     roughness: surface.roughness,
     metalness: surface.metalness,
-    specularIntensity: surface.specular,
     envMapIntensity: surface.env,
     side: THREE.DoubleSide,
     alphaTest: m.alpha === 'mask' ? 0.5 : 0,
@@ -56,8 +58,10 @@ function makeMaterial(m, texture) {
     polygonOffsetFactor: m.decal ? -2 : 0,
     polygonOffsetUnits: m.decal ? -2 : 0,
   });
-  // Ambient (sky fill + environment) only where the sky is visible; the sun is unaffected.
+  // Ambient (sky fill + environment) only where the sky is visible; the sun is unaffected. The Fresnel/specular reflectance
+  // (the class's `specular`) fades the same way, down to nothing indoors, so enclosed rooms show no sky sheen.
   material.aoNode = SkyAmbient.node;
+  material.specularIntensityNode = SkyAmbient.specular.mul(surface.specular);
   return material;
 }
 

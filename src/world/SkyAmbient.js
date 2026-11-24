@@ -16,6 +16,7 @@ const GOLDEN_ANGLE = 2.399963229728653;
  * rotated per pixel by interleaved gradient noise so the few probes dither into a continuous gradient instead of bands.
  * Enclosure: a point whose own column is covered (a room, tunnel, balcony) ignores the ring completely, because the height
  * field cannot tell a wall from open air and the ring would otherwise count ground outside the room as sky.
+ * Two outputs from one probe pass: `node` (ambient, floors at `minimum`) and `specular` (sky reflection, floors at 0).
  */
 const K = CONFIG.lighting.skyAmbient;
 const unit = CONFIG.player.eyeHeight;
@@ -35,7 +36,11 @@ const columnTop = (p) => heights.sample(p.xz.sub(origin).mul(invSize)).r;
 /** Sky seen from a probe: grows from 0 to 1 as `p` rises above the highest surface in its column. */
 const clearance = (p) => smoothstep(0, K.soft * unit, p.y.sub(columnTop(p)).add(K.bias * unit));
 
-const openness = Fn(() => {
+/** Value of `skyView` on flat open ground: a surface lifted only `lift` off the ground reads below full clearance. */
+const OPEN = (t => t * t * (3 - 2 * t))(Math.min(1, (K.lift + K.bias) / K.soft));
+
+/** Share of the sky a point sees: 0 under any roof or ceiling, `OPEN` on open ground. Computed once per pixel and shared. */
+const skyView = Fn(() => {
   const n = normalWorld.normalize();
   const base = positionWorld.add(n.mul(K.lift * unit));
   const spin = interleavedGradientNoise(screenCoordinate).mul(Math.PI * 2);
@@ -55,12 +60,19 @@ const openness = Fn(() => {
   // `bias` below the point, which every surface seen from above satisfies thanks to `lift`), so anything under a roof or
   // ceiling gets exactly `minimum` and sky fill never leaks in through walls. Open ground is untouched.
   const covered = smoothstep(-K.bias * unit, 0, columnTop(base).sub(base.y));
-  return mix(K.minimum, 1, open.div(K.taps).mul(float(1).sub(covered)));
-})();
+  return open.div(K.taps).mul(float(1).sub(covered));
+})().toVar('skyView');
 
 export const SkyAmbient = {
   /** Float node, 1 = open sky, `minimum` = fully covered. Assign to a node material's `aoNode`. */
-  node: openness,
+  node: mix(K.minimum, 1, skyView),
+
+  /**
+   * Float node, 1 = open sky, 0 = no sky at all. Scales the Fresnel/specular reflectance (`specularIntensityNode`): the sky
+   * reflection is the one thing an enclosed room cannot show, so unlike `node` it drops to exactly 0 under a roof.
+   * `aoNode` cannot do this: the indirect specular occlusion in three.js collapses to the same `minimum` for rough surfaces.
+   */
+  specular: smoothstep(0, OPEN, skyView),
 
   /** Rasterizes the map's triangles (collectTriangles() output) into the height field. Call before the first render. */
   bake(chunks, bounds) {

@@ -104,7 +104,7 @@ export const CONFIG = {
     material: { roughness: 0.9, metalness: 0 },
     /**
      * Surface classes, picked by the first `match` hitting the baked material name. roughness/metalness shape the
-     * highlight; `specular` (0..1) is the Fresnel reflectance of non-metals (how much sky shows at grazing angles);
+     * highlight; `specular` (0..1) is the Fresnel reflectance of non-metals (how much sky shows at grazing angles; fades to 0 under roofs and indoors, see SkyAmbient.specular);
      * `env` scales the sky reflection for that class.
      */
     surfaces: [

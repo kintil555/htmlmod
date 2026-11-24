@@ -77,4 +77,11 @@ const roofTop = [[5, 5, 5], [0, 1, 0]];
 for (const [p, n] of [openGround, roofTop]) assert.ok(Math.abs(ambient(p, n, true) - ambient(p, n, false)) < 1e-6, 'gate leaves open surfaces alone');
 assert.ok(ambient(...outside, true) < ambient(...openGround, true) - 0.05, 'ground beside the wall is darker than open ground');
 
+// Specular (SkyAmbient.specular = smoothstep(0, OPEN, skyView)): sky reflection must vanish indoors, stay full in the open.
+const OPEN = smooth(0, 1, (K.lift + K.bias) / K.soft);
+const specular = (p, n) => smooth(0, OPEN, (ambient(p, n, true) - K.minimum) / (1 - K.minimum));
+for (const [name, [p, n]] of Object.entries({ floorNear, wallNear, floorMid })) assert.equal(specular(p, n), 0, name + ' reflects no sky indoors');
+for (const [p, n] of [openGround, roofTop]) assert.ok(Math.abs(specular(p, n) - 1) < 1e-6, 'open surfaces keep their full sky reflection');
+assert.ok(specular(...outside) > 0 && specular(...outside) < 1, 'ground beside the wall reflects part of the sky');
+
 console.log('sky tests passed');
