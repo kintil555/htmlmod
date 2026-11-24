@@ -51,7 +51,6 @@ export const STR = {
     sdkFailed: 'Could not build the download',
     err: {
       notZip: 'Not a valid ZIP file',
-      zip64: 'ZIP64 archives are not supported',
       encrypted: 'Encrypted ZIP files are not supported',
       method: 'Unsupported ZIP compression method',
       corrupt: 'The ZIP file is corrupt',
@@ -59,6 +58,7 @@ export const STR = {
       tooManyEntries: 'The ZIP file has too many entries',
       tooLarge: 'The ZIP file unpacks to too much data',
       zipTooBig: 'The ZIP file is too big',
+      storageFull: 'Not enough browser storage for this mod',
       unsafePath: path => `Unsafe path in ZIP: ${path}`,
       missingFile: path => `File missing in ZIP: ${path}`,
       badManifest: 'mod.json is not valid JSON',

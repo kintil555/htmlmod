@@ -1,11 +1,19 @@
 /**
  * Minimal ZIP library (no dependencies). Reads stored + deflate archives with the browser's DecompressionStream,
  * writes stored or deflate archives with CompressionStream. Works in browsers and Node 18+.
- * Not supported (rejected with a ZipError): encryption, ZIP64, other compression methods.
+ * Reads ZIP64 archives. ZipReader.fromBlob reads entries lazily from a Blob/File, so big archives are not loaded whole.
+ * Not supported (rejected with a ZipError): encryption, other compression methods, single entries over 2 GB.
  */
 const SIG_EOCD = 0x06054b50;
 const SIG_CEN = 0x02014b50;
 const SIG_LOC = 0x04034b50;
+const SIG_EOCD64 = 0x06064b50;
+const SIG_LOC64 = 0x07064b50;
+const EOCD64_LOC = 20;
+const EOCD64_MIN = 56;
+const U32 = 0xffffffff;
+/** Typed arrays cannot hold much more than this in browsers, so one entry may not be bigger. */
+const MAX_ENTRY_BYTES = 0x7fffffff;
 const EOCD_MIN = 22;
 const EOCD_SEARCH = EOCD_MIN + 0xffff;
 const METHOD_STORE = 0;
@@ -42,82 +50,182 @@ export function normalizePath(name) {
   return parts.length ? parts.join('/') : null;
 }
 
-async function pump(stream, input, limit) {
+/**
+ * Inflates/deflates through a stream. `exact`: `limit` is the exact output size, so the result is written into one
+ * preallocated array (no chunk list + copy, half the peak memory for big files). Otherwise `limit` is an upper bound.
+ */
+async function pump(stream, input, limit, exact = false) {
   const w = stream.writable.getWriter();
   w.write(input).catch(() => {});
   w.close().catch(() => {});
   const r = stream.readable.getReader();
+  const fixed = exact ? new Uint8Array(limit) : null;
   const chunks = [];
   let n = 0;
   for (;;) {
     const { done, value } = await r.read();
     if (done) break;
+    if (n + value.length > limit) { r.cancel().catch(() => {}); throw new ZipError('size-mismatch'); }
+    if (fixed) fixed.set(value, n); else chunks.push(value);
     n += value.length;
-    if (n > limit) { r.cancel().catch(() => {}); throw new ZipError('size-mismatch'); }
-    chunks.push(value);
   }
+  if (fixed) return n === limit ? fixed : fixed.subarray(0, n);
   const out = new Uint8Array(n);
   let o = 0;
   for (const c of chunks) { out.set(c, o); o += c.length; }
   return out;
 }
 
-const inflate = (raw, size) => pump(new DecompressionStream('deflate-raw'), raw, size);
+const inflate = (raw, size) => pump(new DecompressionStream('deflate-raw'), raw, size, true);
 const deflate = raw => pump(new CompressionStream('deflate-raw'), raw, raw.length + (raw.length >> 1) + 1024);
+
+const dataView = u8 => new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+
+/** Reads a little-endian 64-bit value as a Number (exact below 2^53, anything larger is rejected as corrupt). */
+function u64(v, pos) {
+  const n = v.getUint32(pos, true) + v.getUint32(pos + 4, true) * 0x100000000;
+  if (!Number.isSafeInteger(n)) throw new ZipError('corrupt');
+  return n;
+}
+
+/**
+ * Finds the central directory. `win` is the end of the file (or all of it). Returns { count, cdSize, cdOffset }, or
+ * { need: offset } when the archive is ZIP64 and its 56-byte ZIP64 end record (at `need`) must be passed as `zip64Record`.
+ */
+function locateDirectory(win, zip64Record) {
+  const v = dataView(win);
+  let eocd = -1;
+  for (let i = win.length - EOCD_MIN; i >= Math.max(0, win.length - EOCD_SEARCH); i--) {
+    if (v.getUint32(i, true) === SIG_EOCD) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new ZipError('not-a-zip');
+  let count = v.getUint16(eocd + 10, true);
+  let cdSize = v.getUint32(eocd + 12, true);
+  let cdOffset = v.getUint32(eocd + 16, true);
+  if (count === 0xffff || cdSize === U32 || cdOffset === U32) {
+    const loc = eocd - EOCD64_LOC;
+    if (loc < 0 || v.getUint32(loc, true) !== SIG_LOC64) throw new ZipError('corrupt');
+    if (!zip64Record) return { need: u64(v, loc + 8) };
+    const r = dataView(zip64Record);
+    if (zip64Record.length < EOCD64_MIN || r.getUint32(0, true) !== SIG_EOCD64) throw new ZipError('corrupt');
+    count = u64(r, 32); cdSize = u64(r, 40); cdOffset = u64(r, 48);
+  }
+  return { count, cdSize, cdOffset };
+}
+
+/** Reads the ZIP64 extra field (id 0x0001): 8-byte values for exactly the 32-bit fields that were 0xffffffff. */
+function readZip64Extra(v, pos, len, entry) {
+  const end = pos + len;
+  while (pos + 4 <= end) {
+    const id = v.getUint16(pos, true);
+    const size = v.getUint16(pos + 2, true);
+    pos += 4;
+    if (id === 0x0001) {
+      const stop = pos + size;
+      for (const key of ['size', 'csize', 'offset']) {
+        if (entry[key] !== U32) continue;
+        if (pos + 8 > stop) throw new ZipError('corrupt');
+        entry[key] = u64(v, pos);
+        pos += 8;
+      }
+      return;
+    }
+    pos += size;
+  }
+  throw new ZipError('corrupt');
+}
+
+/** Parses `count` central directory records from `cd` (bytes starting at the first record) into [[path, entry]]. */
+function parseDirectory(cd, count, { maxEntries, maxUnpackedBytes }) {
+  if (count > maxEntries) throw new ZipError('too-many-entries');
+  const v = dataView(cd);
+  const dec = new TextDecoder('utf-8');
+  const raw = [];
+  let pos = 0;
+  let total = 0;
+  for (let i = 0; i < count; i++) {
+    if (pos + 46 > cd.length || v.getUint32(pos, true) !== SIG_CEN) throw new ZipError('corrupt');
+    const flags = v.getUint16(pos + 8, true);
+    const nameLen = v.getUint16(pos + 28, true);
+    const extraLen = v.getUint16(pos + 30, true);
+    const commentLen = v.getUint16(pos + 32, true);
+    if (pos + 46 + nameLen + extraLen + commentLen > cd.length) throw new ZipError('corrupt');
+    const name = dec.decode(cd.subarray(pos + 46, pos + 46 + nameLen));
+    const entry = {
+      flags, method: v.getUint16(pos + 10, true), crc: v.getUint32(pos + 16, true),
+      csize: v.getUint32(pos + 20, true), size: v.getUint32(pos + 24, true), offset: v.getUint32(pos + 42, true),
+    };
+    if (entry.csize === U32 || entry.size === U32 || entry.offset === U32) readZip64Extra(v, pos + 46 + nameLen, extraLen, entry);
+    pos += 46 + nameLen + extraLen + commentLen;
+    if (name.endsWith('/') || JUNK.test(name.replace(/\\/g, '/'))) continue;
+    const path = normalizePath(name);
+    if (!path) throw new ZipError('unsafe-path', name);
+    if (flags & FLAG_ENCRYPTED) throw new ZipError('encrypted', name);
+    if (entry.method !== METHOD_STORE && entry.method !== METHOD_DEFLATE) throw new ZipError('method', name);
+    if (entry.size > MAX_ENTRY_BYTES || entry.csize > MAX_ENTRY_BYTES) throw new ZipError('too-large', name);
+    total += entry.size;
+    if (total > maxUnpackedBytes) throw new ZipError('too-large');
+    raw.push([path, entry]);
+  }
+  return raw;
+}
 
 export class ZipReader {
   /**
+   * Reads a ZIP held in memory. For big archives use `ZipReader.fromBlob`, which never loads the whole file.
    * @param {ArrayBuffer|Uint8Array} buffer
    * @param {{maxEntries:number, maxUnpackedBytes:number}} limits
    */
   constructor(buffer, limits) {
-    this.u8 = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-    this.view = new DataView(this.u8.buffer, this.u8.byteOffset, this.u8.byteLength);
     this.entries = new Map();
-    this._parse(limits);
+    this.blob = null;
+    this.u8 = null;
+    this.size = 0;
+    if (buffer == null) return; // fromBlob fills the rest in
+    this.u8 = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+    this.size = this.u8.length;
+    let dir = locateDirectory(this.u8, null);
+    if (dir.need !== undefined) dir = locateDirectory(this.u8, this._slice(dir.need, dir.need + EOCD64_MIN));
+    this._setEntries(parseDirectory(this._slice(dir.cdOffset, dir.cdOffset + dir.cdSize), dir.count, limits));
   }
 
-  _parse({ maxEntries, maxUnpackedBytes }) {
-    const v = this.view;
-    let eocd = -1;
-    for (let i = this.u8.length - EOCD_MIN; i >= Math.max(0, this.u8.length - EOCD_SEARCH); i--) {
-      if (v.getUint32(i, true) === SIG_EOCD) { eocd = i; break; }
-    }
-    if (eocd < 0) throw new ZipError('not-a-zip');
-    const count = v.getUint16(eocd + 10, true);
-    const cdOffset = v.getUint32(eocd + 16, true);
-    if (count === 0xffff || cdOffset === 0xffffffff) throw new ZipError('zip64');
-    if (count > maxEntries) throw new ZipError('too-many-entries');
-    const dec = new TextDecoder('utf-8');
-    const raw = [];
-    let pos = cdOffset;
-    let total = 0;
-    for (let i = 0; i < count; i++) {
-      if (pos + 46 > this.u8.length || v.getUint32(pos, true) !== SIG_CEN) throw new ZipError('corrupt');
-      const flags = v.getUint16(pos + 8, true);
-      const nameLen = v.getUint16(pos + 28, true);
-      const extraLen = v.getUint16(pos + 30, true);
-      const commentLen = v.getUint16(pos + 32, true);
-      const name = dec.decode(this.u8.subarray(pos + 46, pos + 46 + nameLen));
-      const entry = {
-        flags, method: v.getUint16(pos + 10, true), crc: v.getUint32(pos + 16, true),
-        csize: v.getUint32(pos + 20, true), size: v.getUint32(pos + 24, true), offset: v.getUint32(pos + 42, true),
-      };
-      pos += 46 + nameLen + extraLen + commentLen;
-      if (name.endsWith('/') || JUNK.test(name.replace(/\\/g, '/'))) continue;
-      const path = normalizePath(name);
-      if (!path) throw new ZipError('unsafe-path', name);
-      if (flags & FLAG_ENCRYPTED) throw new ZipError('encrypted', name);
-      if (entry.method !== METHOD_STORE && entry.method !== METHOD_DEFLATE) throw new ZipError('method', name);
-      if (entry.size === 0xffffffff || entry.csize === 0xffffffff) throw new ZipError('zip64');
-      total += entry.size;
-      if (total > maxUnpackedBytes) throw new ZipError('too-large');
-      raw.push([path, entry]);
-    }
+  /**
+   * Opens a ZIP from a Blob/File reading only the end of the file (central directory) up front; entry data is read
+   * on demand with Blob.slice, so archives far bigger than the memory you would want to hold at once still open.
+   * @param {Blob} blob
+   * @param {{maxEntries:number, maxUnpackedBytes:number}} limits
+   * @returns {Promise<ZipReader>}
+   */
+  static async fromBlob(blob, limits) {
+    const zip = new ZipReader(null);
+    zip.blob = blob;
+    zip.size = blob.size;
+    const winStart = Math.max(0, zip.size - EOCD_SEARCH - EOCD64_LOC);
+    const win = await zip._read(winStart, zip.size);
+    let dir = locateDirectory(win, null);
+    if (dir.need !== undefined) dir = locateDirectory(win, await zip._read(dir.need, dir.need + EOCD64_MIN));
+    zip._setEntries(parseDirectory(await zip._read(dir.cdOffset, dir.cdOffset + dir.cdSize), dir.count, limits));
+    return zip;
+  }
+
+  _setEntries(raw) {
     // A single top-level folder (zipped a folder instead of its contents) is stripped.
     const first = raw[0]?.[0].split('/')[0];
     const strip = raw.length > 0 && raw.every(([p]) => p.includes('/') && p.split('/')[0] === first) ? first.length + 1 : 0;
     for (const [path, entry] of raw) this.entries.set(path.slice(strip), entry);
+  }
+
+  _slice(start, end, path = '') {
+    if (!(start >= 0 && start <= end && end <= this.size)) throw new ZipError('corrupt', path);
+    return this.u8.subarray(start, end);
+  }
+
+  async _read(start, end, path = '') {
+    if (this.u8) return this._slice(start, end, path);
+    if (!(start >= 0 && start <= end && end <= this.size)) throw new ZipError('corrupt', path);
+    const out = new Uint8Array(await this.blob.slice(start, end).arrayBuffer());
+    if (out.length !== end - start) throw new ZipError('corrupt', path);
+    return out;
   }
 
   has(path) { return this.entries.has(path); }
@@ -126,11 +234,11 @@ export class ZipReader {
   async bytes(path) {
     const e = this.entries.get(path);
     if (!e) throw new ZipError('missing-file', path);
-    const v = this.view;
-    if (e.offset + 30 > this.u8.length || v.getUint32(e.offset, true) !== SIG_LOC) throw new ZipError('corrupt', path);
-    const start = e.offset + 30 + v.getUint16(e.offset + 26, true) + v.getUint16(e.offset + 28, true);
-    if (start + e.csize > this.u8.length) throw new ZipError('corrupt', path);
-    const data = this.u8.subarray(start, start + e.csize);
+    const head = await this._read(e.offset, e.offset + 30, path);
+    const h = dataView(head);
+    if (h.getUint32(0, true) !== SIG_LOC) throw new ZipError('corrupt', path);
+    const start = e.offset + 30 + h.getUint16(26, true) + h.getUint16(28, true);
+    const data = await this._read(start, start + e.csize, path);
     const out = e.method === METHOD_STORE ? data : await inflate(data, e.size);
     if (out.length !== e.size || crc32(out) !== e.crc) throw new ZipError('corrupt', path);
     return out;

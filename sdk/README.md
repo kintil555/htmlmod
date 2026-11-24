@@ -25,7 +25,7 @@ Mods run with full page access: only install mods you trust. Start without mods 
 | `html` | HTML entry. Default: `index.html` when no JS entry exists |
 | `css` | array of CSS files applied to the HTML entry |
 
-Limits: zip ≤ 50 MB, ≤ 2000 files, ≤ 200 MB unpacked. No encryption/ZIP64.
+Limits: zip ≤ 2 GB, ≤ 20000 files, ≤ 4 GB unpacked, ≤ 2 GB per file. ZIP64 works; no encryption.
 
 ## JS mods
 `main.js` is an ES module. Export a default function (sync or async); it receives `api`.

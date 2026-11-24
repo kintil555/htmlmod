@@ -10,7 +10,7 @@ export class ModError extends Error {
 
 /** Maps a ZipError code to a STR.mods.err key. */
 export function zipErrorKey(err) {
-  const map = { 'not-a-zip': 'notZip', zip64: 'zip64', encrypted: 'encrypted', method: 'method', corrupt: 'corrupt', 'size-mismatch': 'sizeMismatch', 'too-many-entries': 'tooManyEntries', 'too-large': 'tooLarge', 'unsafe-path': 'unsafePath', 'missing-file': 'missingFile' };
+  const map = { 'not-a-zip': 'notZip', encrypted: 'encrypted', method: 'method', corrupt: 'corrupt', 'size-mismatch': 'sizeMismatch', 'too-many-entries': 'tooManyEntries', 'too-large': 'tooLarge', 'unsafe-path': 'unsafePath', 'missing-file': 'missingFile' };
   return new ModError(map[err.code] ?? 'corrupt', err.detail);
 }
 

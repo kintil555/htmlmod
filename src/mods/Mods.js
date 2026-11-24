@@ -17,8 +17,8 @@ const withTimeout = (promise, ms) => new Promise((resolve, reject) => {
   promise.then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
 });
 
-function openZip(buffer) {
-  try { return new ZipReader(buffer, LIMITS); } catch (err) {
+async function openZip(blob) {
+  try { return await ZipReader.fromBlob(blob, LIMITS); } catch (err) {
     throw err instanceof ZipError ? zipErrorKey(err) : err;
   }
 }
@@ -74,11 +74,11 @@ class ModHost {
   /** Installs (or updates) a mod from a ZIP File/Blob and loads it. Throws on an invalid ZIP/manifest. */
   async install(file) {
     if (file.size > CONFIG.mods.maxZipBytes) throw new ModError('zipTooBig');
-    const buffer = await file.arrayBuffer();
-    const manifest = await parseManifest(openZip(buffer), file.name ?? 'mod');
+    const zip = file.slice(0, file.size, 'application/zip'); // a view on the file: nothing is copied into memory
+    const manifest = await parseManifest(await openZip(zip), file.name ?? 'mod');
     const prev = this.states.get(manifest.id);
     if (prev) this._unload(prev);
-    const record = { id: manifest.id, manifest, enabled: true, installedAt: prev?.record.installedAt ?? Date.now(), zip: new Blob([buffer], { type: 'application/zip' }) };
+    const record = { id: manifest.id, manifest, enabled: true, installedAt: prev?.record.installedAt ?? Date.now(), zip };
     await ModStore.put(record);
     const state = prev ?? { id: manifest.id, runtime: null };
     Object.assign(state, { record, status: 'disabled', error: null });
@@ -125,7 +125,7 @@ class ModHost {
     };
     state.runtime = mod;
     try {
-      mod.zip = openZip(await record.zip.arrayBuffer());
+      mod.zip = await openZip(record.zip);
       const api = createModAPI(this, mod);
       await withTimeout(this._run(mod, api), CONFIG.mods.loadTimeoutMs);
       await withTimeout(Promise.all(mod.pending), CONFIG.mods.loadTimeoutMs);

@@ -204,10 +204,11 @@ export const CONFIG = {
     storagePrefix: 'htmlmod.mod.',
     skipParam: 'nomods',
     idPattern: '^[a-z0-9][a-z0-9_-]{1,39}$',
-    maxZipBytes: 50 * 1024 * 1024,
-    maxEntries: 2000,
-    maxUnpackedBytes: 200 * 1024 * 1024,
-    loadTimeoutMs: 10000,
+    maxZipBytes: 2 * 1024 * 1024 * 1024,
+    maxEntries: 20000,
+    maxUnpackedBytes: 4 * 1024 * 1024 * 1024,
+    /** Per start-up phase; big mods spend most of it unpacking. */
+    loadTimeoutMs: 60000,
     maxRuntimeErrors: 20,
     /** Fields a mod may omit from nextbot / prop definitions. */
     defaults: { nextbot: { height: 3.2, speed: 14, turnRate: 4, accel: 28, decel: 28 }, prop: { color: '#9a9fa5' } },

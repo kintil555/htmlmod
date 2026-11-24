@@ -1,4 +1,5 @@
 import { CONFIG } from '../config.js';
+import { ModError } from './Manifest.js';
 
 const STORE = 'mods';
 const memory = new Map();
@@ -15,14 +16,18 @@ function open() {
   return dbPromise;
 }
 
-const wrap = req => new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
-
-/** Runs op(store) in IndexedDB; falls back to a session-only Map when IndexedDB is unavailable (private mode). */
+/** Runs op(store) in IndexedDB and resolves once the transaction has committed (quota errors only show up there). Falls back to a session-only Map when IndexedDB is unavailable (private mode). */
 async function run(mode, op, fallback) {
   try {
     const db = await open();
-    return await wrap(op(db.transaction(STORE, mode).objectStore(STORE)));
-  } catch {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, mode);
+      const req = op(tx.objectStore(STORE));
+      tx.oncomplete = () => resolve(req.result);
+      tx.onabort = tx.onerror = () => reject(tx.error ?? req.error);
+    });
+  } catch (err) {
+    if (err?.name === 'QuotaExceededError') throw new ModError('storageFull');
     return fallback();
   }
 }
