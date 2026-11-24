@@ -29,6 +29,7 @@ NO_COLLIDE = ('materialsmodelsprops_interiorsflorescent', 'materialsmodelsdav0r'
               'gm_constructoverlay', 'decals', 'gm_constructconstruct_credits', 'gm_constructwater')
 DECAL = ('gm_constructoverlay', 'decals', 'gm_constructconstruct_credits')
 WATER = ('gm_constructwater',)
+MIRROR = ('glassreflectiveglass', 'mirror')   # flat panes the game renders as real planar mirrors
 
 CT = {5120: np.int8, 5121: np.uint8, 5122: np.int16, 5123: np.uint16, 5125: np.uint32, 5126: np.float32}
 NC = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4}
@@ -182,7 +183,7 @@ def bake_render(gl, prims, origin, out_dir):
         materials.append({
             'name': name, 'texture': rel, 'color': [round(c, 3) for c in color], 'alpha': alpha,
             'wrap': [wrap_s, wrap_t], 'decal': starts(name, DECAL), 'water': starts(name, WATER),
-            'collide': not starts(name, NO_COLLIDE),
+            'collide': not starts(name, NO_COLLIDE), 'mirror': starts(name, MIRROR),
             'vertices': len(pos), 'indices': len(idx), 'indexBytes': idx.itemsize,
             'pos': push(pos), 'nrm': push(nrm), 'uv': push(uv), 'idx': push(idx),
         })

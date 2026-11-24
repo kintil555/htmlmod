@@ -56,6 +56,7 @@ export const CONFIG = {
     shadow: { mapSize: 4096, bias: -0.0003, normalBias: 0.05 },
     fog: { color: 0xc3d6ea, density: 0.0016 },
     material: { roughness: 0.9, metalness: 0 },
+    mirror: { color: 0xdbe6e6, resolution: 0.75, maxSize: 2048, clipBias: 0.003, multisample: 4, offset: 0.01 },
     water: { color: 0x3d7d9c, opacity: 0.72, roughness: 0.15 },
   },
   limits: { maxNextbots: 30, maxProps: 80 },

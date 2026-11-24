@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { Assets } from '../core/Assets.js';
+import { buildMirrors } from './Mirror.js';
 
 async function fetchOk(url) {
   const r = await fetch(url);
@@ -57,6 +58,12 @@ export function buildMap({ def, meta, buffer }) {
   const textures = new Set();
 
   for (const m of meta.materials) {
+    if (m.mirror) {
+      const pos = new Float32Array(buffer, m.pos, m.vertices * 3);
+      const idx = new (m.indexBytes === 2 ? Uint16Array : Uint32Array)(buffer, m.idx, m.indices);
+      for (const r of buildMirrors(pos, idx, m.name)) group.add(r);
+      continue;
+    }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(buffer, m.pos, m.vertices * 3), 3));
     const n8 = new Int8Array(buffer, m.nrm, m.vertices * 3);

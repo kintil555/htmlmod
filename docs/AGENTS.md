@@ -27,6 +27,8 @@ One game, one style. Everything is a library. **Extend, never duplicate.**
 
 **Add a map:** run `python3 tools/bake_map.py <glTF dir> assets/maps/<id>` (needs numpy + Pillow; build-time only), then add one entry to `src/content/maps.js` (`eyeHeight`, `spawn`). Set `CONFIG.world.map` to load it. The map is scaled at load so its player eye height equals `CONFIG.player.eyeHeight`. Keep the author's license file next to the map and credit it in `STR.help`.
 
+**Mirrors:** any flat pane whose material name starts with `MIRROR` in `tools/bake_map.py` (default: `glassreflectiveglass`, `mirror`) is baked with `mirror: true` and rebuilt by `world/Mirror.js` as real planar `Reflector`s (one per plane, plus a back-side twin). No per-pane code. Tunables: `CONFIG.lighting.mirror`.
+
 **Lighting/sky:** all numbers live in `CONFIG.lighting`; code is `world/Environment.js`. Shadows are static; they re-render only when a prop is added or removed (`entity.castsShadow = true`).
 
 **Add a new content file:** import it in `src/content/index.js`.
