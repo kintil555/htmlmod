@@ -134,18 +134,30 @@ class ModHost {
       disposers: [], blobUrls: new Set(), textureUrls: new Set(), entities: new Set(), pending: [], configBackup: new Map(),
     };
     state.runtime = mod;
-    try {
-      mod.zip = await openZip(record.zip);
-      const api = createModAPI(this, mod);
-      await withTimeout(this._run(mod, api), CONFIG.mods.loadTimeoutMs);
-      await withTimeout(Promise.all(mod.pending), CONFIG.mods.loadTimeoutMs);
-      state.status = 'loaded';
-      state.error = null;
-    } catch (err) {
+    const T = CONFIG.mods.loadTimeoutMs;
+    const fail = err => {
       console.error(`[mod:${record.id}]`, err);
       this._unload(state);
       state.status = 'error';
       state.error = err;
+    };
+    try {
+      mod.zip = await openZip(record.zip);
+      // A mod that waits for `api.ready` inside its init cannot finish before the game boots, and the game boots only after
+      // all mods started. So the moment it touches `api.ready` the boot is released and the mod finishes in the background.
+      const touched = new Promise(resolve => { mod.touchReady = () => resolve('ready'); });
+      const api = createModAPI(this, mod);
+      const done = this._run(mod, api).then(() => Promise.all(mod.pending)).then(() => 'done');
+      if (await withTimeout(Promise.race([done, touched]), T) === 'ready') {
+        state.status = 'loading';
+        this.readyPromise.then(() => withTimeout(done, T)).then(() => { state.status = 'loaded'; state.error = null; }, fail).finally(() => this.events.emit('change'));
+      } else {
+        await withTimeout(done, T);
+        state.status = 'loaded';
+        state.error = null;
+      }
+    } catch (err) {
+      fail(err);
     }
     this.events.emit('change');
   }

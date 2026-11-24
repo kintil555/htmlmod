@@ -43,7 +43,7 @@ export const STR = {
     remove: 'Remove',
     reloadNote: 'Add ?nomods to the address to start without mods.',
     byAuthor: author => `by ${author}`,
-    status: { loaded: 'Active', disabled: 'Disabled', error: 'Failed', skipped: 'Skipped (?nomods)' },
+    status: { loading: 'Starting…', loaded: 'Active', disabled: 'Disabled', error: 'Failed', skipped: 'Skipped (?nomods)' },
     loaderInfo: (api, min) => `Mod loader API ${api} (runs mods built for API ${min}+)`,
     outdatedBadge: 'Outdated',
     outdatedInfo: (api, current) => `Built for mod API ${api}, this loader is on API ${current}. It may break: ask the author for an update.`,

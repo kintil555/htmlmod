@@ -221,7 +221,7 @@ export function createModAPI(host, mod) {
     get renderer() { return host.game?.renderer ?? null; },
     get input() { return host.game?.input ?? null; },
     get hud() { return host.game?.hud ?? null; },
-    get ready() { return host.readyPromise; },
+    get ready() { mod.touchReady?.(); return host.readyPromise; },
   };
   return api;
 }
