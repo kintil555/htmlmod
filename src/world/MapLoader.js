@@ -88,10 +88,16 @@ export function buildMap({ def, meta, buffer }) {
     if (m.water) {
       geo.computeBoundingBox();
       const bb = geo.boundingBox;
+      // The quad is replaced by a fine grid so waves and splashes can displace real vertices (see Water.js).
+      const cells = CONFIG.water.waves.meshCell / scale;
+      const grid = new THREE.PlaneGeometry(bb.max.x - bb.min.x, bb.max.z - bb.min.z, Math.ceil((bb.max.x - bb.min.x) / cells), Math.ceil((bb.max.z - bb.min.z) / cells));
+      grid.rotateX(-Math.PI / 2);
+      grid.translate((bb.min.x + bb.max.x) / 2, bb.max.y, (bb.min.z + bb.max.z) / 2);
+      geo.copy(grid); grid.dispose(); geo.computeBoundingSphere();
       water = {
         minX: Math.min(water?.minX ?? Infinity, bb.min.x * scale), maxX: Math.max(water?.maxX ?? -Infinity, bb.max.x * scale),
         minZ: Math.min(water?.minZ ?? Infinity, bb.min.z * scale), maxZ: Math.max(water?.maxZ ?? -Infinity, bb.max.z * scale),
-        y: Math.max(water?.y ?? -Infinity, bb.max.y * scale),
+        y: Math.max(water?.y ?? -Infinity, bb.max.y * scale), scale,
       };
     }
 
@@ -104,6 +110,7 @@ export function buildMap({ def, meta, buffer }) {
     mesh.userData.noAim = m.water;
     mesh.userData.collide = m.collide;
     mesh.matrixAutoUpdate = false;
+    mesh.frustumCulled = !m.water;
     group.add(mesh);
   }
   group.matrixAutoUpdate = false;

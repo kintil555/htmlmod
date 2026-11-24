@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import {
   texture, uniform, positionWorld, cameraPosition, cameraViewMatrix, time, vec2, vec3, vec4, float, color, smoothstep, pow, max, saturate,
-  dot, normalize, length, reflect, sin, cos, exp, select, mx_noise_float,
+  dot, normalize, length, reflect, sin, cos, exp, select, mx_noise_float, positionLocal, modelWorldMatrix,
 } from 'three/tsl';
 import { CONFIG } from '../config.js';
 import { SkyAmbient } from './SkyAmbient.js';
@@ -43,6 +43,7 @@ const uniforms = {
   fogColor: uniform(new THREE.Vector3()),
   absorb: uniform(new THREE.Vector3(...U.absorb)),
 };
+const invScale = uniform(1);
 
 const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - L.sun.elevation), THREE.MathUtils.degToRad(L.sun.azimuth));
 const sunColor = new THREE.Color(L.sun.color);
@@ -52,6 +53,19 @@ const S = { ready: false, info: null, sim: null, depth: null, nx: 0, nz: 0, cell
 const fogShallow = new THREE.Color(U.shallow);
 const fogDeep = new THREE.Color(U.deep);
 
+/** Summed wave sines at world xz `p`: height h and slopes gx, gz (nodes). */
+function waveField(p) {
+  let h = float(0); let gx = float(0); let gz = float(0);
+  for (const [dx, dz, k, speed, amp] of W.waves.layers) {
+    const l = Math.hypot(dx, dz);
+    const ph = dot(p, vec2(dx / l, dz / l)).mul(k).add(time.mul(speed));
+    h = h.add(sin(ph).mul(amp));
+    const c = cos(ph).mul(amp * k);
+    gx = gx.add(c.mul(dx / l)); gz = gz.add(c.mul(dz / l));
+  }
+  return { h, gx, gz };
+}
+
 function buildMaterial() {
   const p = positionWorld.xz;
   const toCam = cameraPosition.sub(positionWorld);
@@ -60,25 +74,24 @@ function buildMaterial() {
   const below = viewW.y.lessThan(0);
   const wuv = p.sub(origin).mul(invSize);
 
-  // Wave slopes: a few directional sines plus a noise detail layer, fading with distance so far water does not shimmer.
-  let gx = float(0); let gz = float(0);
-  for (const [dx, dz, k, speed, amp] of W.waves.layers) {
-    const l = Math.hypot(dx, dz);
-    const c = cos(dot(p, vec2(dx / l, dz / l)).mul(k).add(time.mul(speed))).mul(amp * k);
-    gx = gx.add(c.mul(dx / l)); gz = gz.add(c.mul(dz / l));
-  }
+  // Waves: directional sines give height and slope (the same sum drives the vertex displacement and the normal), plus a noise detail
+  // layer on the normal only. Everything fades out towards the shore (no waves on land) and with distance (less shimmer).
+  const fade = smoothstep(0, W.waves.shoreFade, texture(depthTex, wuv).r);
+  const wave = waveField(p);
+  let gx = wave.gx; let gz = wave.gz;
   const f = W.waves.detailScale; const e = 0.12;
   const nAt = (ox, oz) => mx_noise_float(vec3(p.x.add(ox).mul(f), p.y.add(oz).mul(f), time.mul(0.35)));
   const n0 = nAt(0, 0);
   gx = gx.add(nAt(e, 0).sub(n0).div(e * f).mul(W.waves.detail));
   gz = gz.add(nAt(0, e).sub(n0).div(e * f).mul(W.waves.detail));
   const lod = float(1).sub(smoothstep(W.waves.fadeNear, W.waves.fadeFar, dist).mul(1 - W.waves.farKeep));
-  gx = gx.mul(lod); gz = gz.mul(lod);
+  gx = gx.mul(lod).mul(fade); gz = gz.mul(lod).mul(fade);
 
   // Ripple slopes from the simulated height field (central differences).
   const hAt = (ox, oz) => texture(simTex, wuv.add(texel.mul(vec2(ox, oz)))).r;
-  const rx = hAt(1, 0).sub(hAt(-1, 0)).div(cellU.mul(2)).mul(W.waves.rippleGain);
-  const rz = hAt(0, 1).sub(hAt(0, -1)).div(cellU.mul(2)).mul(W.waves.rippleGain);
+  const rg = W.waves.rippleGain * W.waves.splashGain;
+  const rx = hAt(1, 0).sub(hAt(-1, 0)).div(cellU.mul(2)).mul(rg);
+  const rz = hAt(0, 1).sub(hAt(0, -1)).div(cellU.mul(2)).mul(rg);
   const nW = normalize(vec3(gx.add(rx).negate(), 1, gz.add(rz).negate()));
   const nF = select(below, nW.negate(), nW);
   const cosV = saturate(dot(nF, viewW));
@@ -98,7 +111,10 @@ function buildMaterial() {
   const edge = lap.mul(W.foam.shoreWidth);
   const shore = float(1).sub(smoothstep(edge.mul(0.3), edge, depth)).mul(smoothstep(0.25, 0.6, fine));
   const splash = smoothstep(0.1, 0.6, texture(simTex, wuv).g.mul(fine.mul(0.8).add(0.6)));
-  const foam = max(shore, splash);
+  // Crest foam: the highest parts of waves and splashes break white.
+  const lift = wave.h.add(texture(simTex, wuv).r.mul(W.waves.splashGain)).mul(fade);
+  const crest = smoothstep(W.foam.crestStart, W.foam.crestEnd, lift).mul(smoothstep(0.35, 0.7, fine));
+  const foam = max(max(shore, splash), crest);
 
   // Sun glitter: the sun's reflection (sharp core + a sparkling road) over the wave normals; none indoors.
   const refl = reflect(viewW.negate(), nF);
@@ -121,6 +137,12 @@ function buildMaterial() {
   material.opacityNode = select(below, belowOpacity, aboveOpacity);
   material.emissiveNode = select(below, belowColor.mul(U.tint), glitter);
   material.normalNode = normalize(cameraViewMatrix.mul(vec4(nF, 0)).xyz);
+  // Vertex displacement: waves + the simulated ripples/splashes lift the (subdivided) surface; local y is world y up to the map scale.
+  const wp = modelWorldMatrix.mul(vec4(positionLocal, 1)).xyz;
+  const uvV = wp.xz.sub(origin).mul(invSize);
+  const fadeV = smoothstep(0, W.waves.shoreFade, texture(depthTex, uvV).level(0).r);
+  const liftV = waveField(wp.xz).h.add(texture(simTex, uvV).level(0).r.mul(W.waves.splashGain)).mul(fadeV);
+  material.positionNode = positionLocal.add(vec3(0, liftV.mul(invScale), 0));
   // Indoor pools must not mirror a sky they cannot see: the Fresnel reflection follows sky visibility.
   material.aoNode = SkyAmbient.node;
   material.specularIntensityNode = SkyAmbient.specular;
@@ -169,7 +191,7 @@ export const Water = {
   material() { return (S.material ??= buildMaterial()); },
 
   /**
-   * Bakes the depth field from the map's collision and starts the ripple sim. `info` = { minX, maxX, minZ, maxZ, y } in world units
+   * Bakes the depth field from the map's collision and starts the ripple sim. `info` = { minX, maxX, minZ, maxZ, y, scale } in world units (scale = map -> world)
    * (the pool quad's bounds and surface height, from MapLoader). Call once, after the colliders exist and before the first render.
    */
   bake(info, collision) {
@@ -196,6 +218,7 @@ export const Water = {
     invSize.value.set(1 / (nx * cell), 1 / (nz * cell));
     texel.value.set(1 / nx, 1 / nz);
     cellU.value = cell;
+    invScale.value = 1 / info.scale;
     Object.assign(S, { info, nx, nz, cell, depth });
     S.sim = new WaterSim({ nx, nz, cell, depth, ...CONFIG.water.sim });
     S.ready = true;
