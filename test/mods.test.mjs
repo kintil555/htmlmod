@@ -88,6 +88,14 @@ const fail = async (list, key) => assert.rejects(parseManifest(new ZipReader(awa
 await fail([{ path: 'readme.txt', data: 'x' }], 'noEntry');
 await fail([{ path: 'mod.json', data: '{bad' }, { path: 'main.js', data: '' }], 'badManifest');
 await fail([{ path: 'mod.json', data: '{"id":"A B"}' }, { path: 'main.js', data: '' }], 'badId');
+await fail([{ path: 'mod.json', data: '{"api":0}' }, { path: 'main.js', data: '' }], 'tooOldApi');
+{
+  const { CONFIG } = await import('../src/config.js');
+  const { isOutdated } = await import('../src/mods/Manifest.js');
+  assert.equal(isOutdated(CONFIG.mods.apiVersion), false, 'current API is not outdated');
+  assert.equal(isOutdated(CONFIG.mods.apiVersion - 1), true, 'older API is outdated');
+  assert.ok(CONFIG.mods.minApiVersion <= CONFIG.mods.apiVersion);
+}
 await fail([{ path: 'mod.json', data: '{"api":99}' }, { path: 'main.js', data: '' }], 'newerApi');
 await fail([{ path: 'mod.json', data: '{"main":"nope.js"}' }], 'missingFile');
 

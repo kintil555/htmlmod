@@ -4,7 +4,7 @@ import { Events, events } from '../core/Events.js';
 import { Assets } from '../core/Assets.js';
 import { toast } from '../ui/ui.js';
 import { ZipReader, ZipError } from './Zip.js';
-import { ModError, parseManifest, zipErrorKey } from './Manifest.js';
+import { ModError, parseManifest, zipErrorKey, isOutdated } from './Manifest.js';
 import { ModStore } from './ModStore.js';
 import { createModAPI } from './ModAPI.js';
 import { loadModule } from './Modules.js';
@@ -62,12 +62,20 @@ class ModHost {
   attach(game) {
     this.game = game;
     this._ready(game);
+    this.warnOutdated();
     events.emit('game:ready', game);
+  }
+
+  /** Toasts the names of enabled mods built for an older mod API. Returns them. */
+  warnOutdated(only = this.list()) {
+    const names = only.filter(m => m.outdated && m.enabled && m.status !== 'skipped').map(m => m.name);
+    if (names.length) toast(STR.mods.outdatedToast(names));
+    return names;
   }
 
   list() {
     return [...this.states.values()].map(s => ({
-      id: s.id, ...s.record.manifest, enabled: s.record.enabled, status: s.status, error: s.error ? describeError(s.error) : '',
+      id: s.id, ...s.record.manifest, outdated: isOutdated(s.record.manifest.api), enabled: s.record.enabled, status: s.status, error: s.error ? describeError(s.error) : '',
     }));
   }
 
@@ -84,7 +92,9 @@ class ModHost {
     Object.assign(state, { record, status: 'disabled', error: null });
     this.states.set(state.id, state);
     await this._load(state);
-    return this.list().find(m => m.id === state.id);
+    const info = this.list().find(m => m.id === state.id);
+    this.warnOutdated([info]);
+    return info;
   }
 
   async setEnabled(id, enabled) {

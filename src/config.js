@@ -199,7 +199,10 @@ export const CONFIG = {
   spawnMenu: { stickyMs: 250, closeGraceMs: 800 },
   /** Mod loader (src/mods). Mods are ZIP files with HTML/JS, stored in IndexedDB. API contract: sdk/README.md. */
   mods: {
+    /** Current mod API. Bump on breaking changes: mods built for an older API still load but are flagged as outdated. */
     apiVersion: 1,
+    /** Oldest mod API the loader still runs. Older mods are refused with an error. */
+    minApiVersion: 1,
     dbName: 'htmlmod.mods',
     storagePrefix: 'htmlmod.mod.',
     skipParam: 'nomods',

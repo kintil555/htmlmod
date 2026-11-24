@@ -4,6 +4,7 @@ import { MenuButtonRegistry } from '../core/registries.js';
 import { Mods, describeError } from '../mods/Mods.js';
 import { downloadSdk, downloadTemplate } from '../mods/Sdk.js';
 import { STR } from '../content/strings.js';
+import { CONFIG } from '../config.js';
 
 /** Menu column: fixed buttons, then buttons mods added for `where`, then the tail. Rebuilds when mods change them. */
 function MenuNav(where, head, tail = []) {
@@ -94,12 +95,18 @@ export function ModsScreen({ onBack }) {
         m.author ? el('span', { class: 'mods__author', text: STR.mods.byAuthor(m.author) }) : null,
         m.description ? el('p', { class: 'mods__desc', text: m.description }) : null,
         el('span', { class: `mods__status mods__status--${m.status}`, text: STR.mods.status[m.status] }),
+        m.outdated ? el('span', { class: 'mods__badge', text: STR.mods.outdatedBadge }) : null,
+        m.outdated ? el('p', { class: 'mods__outdated', text: STR.mods.outdatedInfo(m.api, CONFIG.mods.apiVersion) }) : null,
         m.error ? el('p', { class: 'mods__err', text: m.error }) : null),
       toggle,
       Button({ label: STR.mods.remove, size: 'sm', onClick: async () => { await attempt(() => Mods.remove(m.id)); toast(STR.mods.removed(m.name)); } }));
   };
+  const banner = el('p', { class: 'mods__banner' });
   const render = () => {
     const mods = Mods.list();
+    const outdated = mods.filter(m => m.outdated).length;
+    banner.textContent = outdated ? STR.mods.outdatedBanner(outdated) : '';
+    banner.hidden = !outdated;
     list.replaceChildren(...(mods.length ? mods.map(row) : [el('p', { class: 'settings__empty', text: STR.mods.empty })]));
   };
   Mods.events.on('change', render);
@@ -108,6 +115,8 @@ export function ModsScreen({ onBack }) {
   const sdkFail = () => STR.mods.sdkFailed;
   const body = [
     el('p', { class: 'mods__warn', text: STR.mods.warning }),
+    el('p', { class: 'mods__loader', text: STR.mods.loaderInfo(CONFIG.mods.apiVersion, CONFIG.mods.minApiVersion) }),
+    banner,
     el('div', { class: 'mods__actions' },
       Button({ label: STR.mods.install, size: 'sm', onClick: () => file.click() }),
       Button({ label: STR.mods.sdk, size: 'sm', onClick: () => attempt(downloadSdk, sdkFail) }),

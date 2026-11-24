@@ -8,6 +8,9 @@ export class ModError extends Error {
   constructor(key, arg) { super(key); this.key = key; this.arg = arg; }
 }
 
+/** True when a mod targets an older mod API than this loader runs (it still loads, but may break). */
+export const isOutdated = api => api < CONFIG.mods.apiVersion;
+
 /** Maps a ZipError code to a STR.mods.err key. */
 export function zipErrorKey(err) {
   const map = { 'not-a-zip': 'notZip', encrypted: 'encrypted', method: 'method', corrupt: 'corrupt', 'size-mismatch': 'sizeMismatch', 'too-many-entries': 'tooManyEntries', 'too-large': 'tooLarge', 'unsafe-path': 'unsafePath', 'missing-file': 'missingFile' };
@@ -32,6 +35,7 @@ export async function parseManifest(zip, fileName = 'mod') {
   if (!new RegExp(CONFIG.mods.idPattern).test(id)) throw new ModError('badId');
   const api = m.api == null ? 1 : Number(m.api);
   if (!Number.isFinite(api) || api > CONFIG.mods.apiVersion) throw new ModError('newerApi', api);
+  if (api < CONFIG.mods.minApiVersion) throw new ModError('tooOldApi', api);
   let main = m.main ? String(m.main) : null;
   let html = m.html ? String(m.html) : null;
   if (!main && !html) {

@@ -20,7 +20,7 @@ Mods run with full page access: only install mods you trust. Start without mods 
 |---|---|
 | `id` | `a-z 0-9 - _`, 2-40 chars. Default: zip file name |
 | `name`, `version`, `author`, `description` | shown in Mods |
-| `api` | API version the mod needs (current: `1`) |
+| `api` | API version the mod was built for (current: `1`). Older than the loader: still loads, flagged **Outdated** in Mods and toasted at start. Older than `minApiVersion`: refused. Newer: refused |
 | `main` | JS entry. Default: `main.js` or `index.js` |
 | `html` | HTML entry. Default: `index.html` when no JS entry exists |
 | `css` | array of CSS files applied to the HTML entry |
