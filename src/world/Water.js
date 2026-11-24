@@ -1,11 +1,12 @@
 import * as THREE from 'three/webgpu';
 import {
   texture, uniform, positionWorld, cameraPosition, cameraViewMatrix, time, vec2, vec3, vec4, float, color, smoothstep, pow, max, saturate,
-  dot, normalize, length, reflect, sin, cos, exp, select, mx_noise_float, positionLocal, modelWorldMatrix,
+  dot, normalize, length, reflect, sin, cos, exp, select, mx_noise_float, positionLocal, modelWorldMatrix, fract, min,
 } from 'three/tsl';
 import { CONFIG } from '../config.js';
 import { SkyAmbient } from './SkyAmbient.js';
 import { WaterSim, blur3 } from './WaterSim.js';
+import { waveFade, swashLift } from './Shore.js';
 
 /**
  * Water for the map's `water` materials. One pool (a flat quad) is turned into:
@@ -20,6 +21,7 @@ import { WaterSim, blur3 } from './WaterSim.js';
 const W = CONFIG.water;
 const L = CONFIG.lighting;
 const U = W.under;
+const SH = W.shore;
 
 const makeTex = (format) => {
   const t = new THREE.DataTexture(new Uint16Array(format === THREE.RGFormat ? 2 : 1), 1, 1, format, THREE.HalfFloatType);
@@ -34,6 +36,9 @@ const origin = uniform(new THREE.Vector2());
 const invSize = uniform(new THREE.Vector2(1, 1));
 const texel = uniform(new THREE.Vector2(1, 1));
 const cellU = uniform(1);
+/** Still surface height and the pool quad's far corner (world units), for geometric thickness and the edge fade. */
+const surfY = uniform(0);
+const hiCorner = uniform(new THREE.Vector2());
 
 const uniforms = {
   /** 1 while the camera is under the surface (eased), else 0. */
@@ -69,14 +74,20 @@ function waveField(p) {
   return { h, gx, gz, sx, sz };
 }
 
-/** Wave amplitude factor by depth: waves shrink in the shallows but keep `shoreKeep` right at the bank, so the surface still reaches it. */
-const ampByDepth = d => smoothstep(0, W.waves.shoreFade, d).mul(1 - W.waves.shoreKeep).add(W.waves.shoreKeep);
+/** Open-water wave amplitude by depth: shrinks in the shallows (keeps `shoreKeep` at the waterline) and dies out over the bank (mirrors Shore.waveFade). */
+const ampByDepth = d => smoothstep(0, W.waves.shoreFade, d).mul(1 - W.waves.shoreKeep).add(W.waves.shoreKeep).mul(smoothstep(-W.waves.bankFade, 0.05, d));
 
-/** Swash: slow surges that run up the bank and drain back, only in the shallows and over the shore (zero in open water). */
-const swashAt = (p, d) => {
-  const w = sin(tU.mul(W.waves.swashSpeed).add(p.x.mul(0.37)).add(p.y.mul(0.23))).mul(0.5).add(0.5);
-  return w.mul(w).mul(W.waves.swash).mul(float(1).sub(smoothstep(W.waves.shoreFade * 0.5, W.waves.shoreFade * 2, d)));
+/** Swash cycle position 0..1: the phase runs with the signed depth, so crests travel up the slope (mirrors Shore.swashPhase). */
+const swashU = (p, d) => {
+  let psi = tU.div(SH.period).add(d.mul(SH.phasePerDepth));
+  for (const [kx, kz, c] of SH.wobble) psi = psi.add(sin(p.x.mul(kx).add(p.y.mul(kz))).mul(c));
+  return fract(psi);
 };
+const swashEnvAt = d => float(1).sub(smoothstep(SH.shallowStart, SH.shallowEnd, d)).mul(float(1).sub(smoothstep(0, SH.reach, d.negate())));
+const bumpAt = u => smoothstep(0, SH.rise, u).mul(float(1).sub(smoothstep(SH.rise, 1, u)));
+
+/** Swash lift: fast uprush onto the bank, slow backwash that draws the waterline below the still level (mirrors Shore.swashLift). */
+const swashAt = (p, d) => swashEnvAt(d).mul(SH.height).mul(bumpAt(swashU(p, d)).mul(1 + SH.draw).sub(SH.draw));
 
 function buildMaterial() {
   const p = positionWorld.xz;
@@ -110,9 +121,9 @@ function buildMaterial() {
   const cosV = saturate(dot(nF, viewW));
 
   // Depth: clarity and colour. Shallow = see-through, deep = darker and more opaque.
-  // Real water thickness over the bank/floor = baked signed depth + how far the surface is lifted here (waves, ripples, swash).
+  // Real water thickness = height of the (lifted) mesh here minus the baked ground, so the waterline is exactly where the mesh meets the ground.
   const lift = wave.h.add(texture(simTex, wuv).r.mul(W.waves.splashGain)).mul(fade).add(swashAt(p, depth));
-  const thick = max(depth.add(lift), 0);
+  const thick = max(positionWorld.y.sub(surfY.sub(depth)), 0);
   const body = float(1).sub(exp(thick.mul(-W.absorb)));
   const tint = float(1).sub(exp(thick.mul(-W.colorDepth)));
   const bodyColor = lerp(vec3(color(W.color.shallow)), vec3(color(W.color.deep)), tint);
@@ -120,10 +131,10 @@ function buildMaterial() {
 
   // Foam: lapping band along the shore + splash/crest foam from the ripple field, broken up by noise.
   const nf = W.foam.noiseScale;
-  const slow = mx_noise_float(vec3(p.x.mul(nf), p.y.mul(nf), time.mul(W.foam.noiseSpeed))).mul(0.5).add(0.5);
   const fine = mx_noise_float(vec3(p.x.mul(W.foam.fineScale), p.y.mul(W.foam.fineScale), time.mul(0.6))).mul(0.5).add(0.5);
-  const lap = sin(time.mul(W.foam.shoreSpeed).add(slow.mul(6.2832))).mul(0.35).add(0.65);
-  const edge = lap.mul(W.foam.shoreWidth);
+  // The uprush front (rising half of the swash cycle) carries the thickest foam; the backwash leaves a thin line.
+  const advance = float(1).sub(smoothstep(SH.rise * 0.8, SH.rise * 1.3, swashU(p, depth))).mul(swashEnvAt(depth));
+  const edge = advance.mul(W.foam.frontWidth).add(0.35).mul(W.foam.shoreWidth);
   const shore = float(1).sub(smoothstep(edge.mul(0.3), edge, thick)).mul(smoothstep(0.25, 0.6, fine));
   const splash = smoothstep(0.1, 0.6, texture(simTex, wuv).g.mul(fine.mul(0.8).add(0.6)));
   // Crest foam: the highest parts of waves and splashes break white.
@@ -139,7 +150,7 @@ function buildMaterial() {
   const glitter = vec3(sunColor.r, sunColor.g, sunColor.b).mul(glint).mul(SkyAmbient.specular).mul(select(below, float(0), float(1)));
 
   const aboveColor = lerp(bodyColor, vec3(color(W.color.foam)), foam);
-  const thin = smoothstep(0, 0.06, thick);
+  const thin = smoothstep(SH.hug * 2, 0.07, thick);
   const aboveOpacity = max(max(body.mul(W.maxOpacity - W.minOpacity).add(W.minOpacity), fres), max(foam.mul(W.foam.opacity), saturate(max(glitter.x, max(glitter.y, glitter.z)).mul(G.opacityGain)))).mul(thin);
 
   // From below: a clear window straight up, mirror-like beyond the critical angle.
@@ -152,14 +163,19 @@ function buildMaterial() {
   material.opacityNode = select(below, belowOpacity, aboveOpacity);
   material.emissiveNode = select(below, belowColor.mul(U.tint), glitter);
   material.normalNode = normalize(cameraViewMatrix.mul(vec4(nF, 0)).xyz);
-  // Vertex displacement: waves + the simulated ripples/splashes lift the (subdivided) surface; local y is world y up to the map scale.
+  // Vertex displacement: waves + ripples + swash lift the (subdivided) surface; local y is world y up to the map scale.
+  // Where the ground is above the lifted surface the mesh hugs the ground (no sheet floats over land, none sinks under it), and the
+  // Gerstner sideways shift is faded near the shore and the pool edge so the mesh is never stretched off the bank or away from the quad border.
   const wp = modelWorldMatrix.mul(vec4(positionLocal, 1)).xyz;
   const uvV = wp.xz.sub(origin).mul(invSize);
   const dV = texture(depthTex, uvV).level(0).r;
   const fadeV = ampByDepth(dV);
   const wv = waveField(wp.xz);
   const liftV = wv.h.add(texture(simTex, uvV).level(0).r.mul(W.waves.splashGain)).mul(fadeV).add(swashAt(wp.xz, dV));
-  material.positionNode = positionLocal.add(vec3(wv.sx.mul(fadeV), liftV, wv.sz.mul(fadeV)).mul(invScale));
+  const hugV = dV.negate().add(SH.hug);
+  const edgeV = min(min(wp.x.sub(origin.x), hiCorner.x.sub(wp.x)), min(wp.z.sub(origin.y), hiCorner.y.sub(wp.z)));
+  const shiftV = smoothstep(W.waves.shoreFade, W.waves.shoreFade * 3, dV).mul(smoothstep(0, W.waves.edgeMargin, edgeV));
+  material.positionNode = positionLocal.add(vec3(wv.sx.mul(shiftV), max(liftV, hugV), wv.sz.mul(shiftV)).mul(invScale));
   // Indoor pools must not mirror a sky they cannot see: the Fresnel reflection follows sky visibility.
   material.aoNode = SkyAmbient.node;
   material.specularIntensityNode = SkyAmbient.specular;
@@ -197,11 +213,7 @@ function surfaceAt(x, z) {
     h += Math.sin((x * dx + z * dz) / l * k + S.t * speed) * amp;
   }
   h += gridAt(S.sim.a, x, z) * W.waves.splashGain;
-  const t = Math.min(1, d / W.waves.shoreFade);
-  const amp = W.waves.shoreKeep + (1 - W.waves.shoreKeep) * t * t * (3 - 2 * t);
-  const sw = Math.sin(S.t * W.waves.swashSpeed + x * 0.37 + z * 0.23) * 0.5 + 0.5;
-  const u = Math.max(0, Math.min(1, (d - W.waves.shoreFade * 0.5) / (W.waves.shoreFade * 1.5)));
-  return S.info.y + h * amp + sw * sw * W.waves.swash * (1 - u * u * (3 - 2 * u));
+  return S.info.y + h * waveFade(d) + swashLift(x, z, d, S.t);
 }
 
 /**
@@ -288,6 +300,8 @@ export const Water = {
     invSize.value.set(1 / (nx * cell), 1 / (nz * cell));
     texel.value.set(1 / nx, 1 / nz);
     cellU.value = cell;
+    surfY.value = info.y;
+    hiCorner.value.set(info.maxX, info.maxZ);
     invScale.value = 1 / info.scale;
     Object.assign(S, { info, nx, nz, cell, depth });
     S.sim = new WaterSim({ nx, nz, cell, depth: depth.map(d => Math.max(0, d)), ...CONFIG.water.sim });

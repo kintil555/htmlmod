@@ -140,8 +140,12 @@ export const CONFIG = {
    * minDepth is the least depth that still counts as water for swimming and ripples).
    * absorb: how fast the body turns opaque with depth; colorDepth: shallow->deep colour blend; minOpacity/maxOpacity: clarity at 0 / full depth.
    * waves.layers: [dirX, dirZ, wavenumber, speed, amplitude] sine waves that raise/lower the surface (vertex displacement) and tilt the normal.
-   * shoreKeep: share of the wave height kept right at the shore; swash/swashSpeed: height and rate of the surges that wash up the bank and
-   * pull back (the waterline moves with the real water thickness = baked signed depth + lift; land depth is negative = how far the bank is above the surface).
+   * shoreKeep: share of the wave height kept right at the waterline; bankFade: bank height (above the surface) over which waves die out, so the bank is never lifted by open-water waves.
+   * shore (world/Shore.js): a swell that travels up the slope. Its phase runs with the baked signed depth (phasePerDepth cycles per unit; land depth is negative =
+   * bank height above the surface), so crests move shoreward: a fast uprush (rise = share of the cycle spent rising) that runs up the bank (reach = bank height where it dies)
+   * and a slow backwash that draws the waterline below the still level (draw = trough depth as a share of height). height: crest above still level; period: seconds per wave;
+   * shallowStart/shallowEnd: depth where the swell fades into open water; wobble: [kx, kz, cycles] sines that vary the phase along the shore; hug: how far the mesh sits above the
+   * ground where there is no water (it follows the bank, no sheet floats over land). Water thickness = mesh height - baked ground, so the waterline is exactly where the mesh meets the ground.
    * splashGain: how much the simulated ripples/splashes lift the surface; shoreFade: depth over which waves grow from nothing at the shore; meshCell: water mesh grid size.
    * sim: speed = ripple travel speed; shoreDamp/deepDamp = per-step energy kept in the shallows / open water; limit = max |height|.
    * waves.choppy: Gerstner sharpening of crests. ripple: wake = push per second per unit of speed, laid along the path as a bow wave (bow = share raised in front) with a trough behind (V wake);
@@ -156,15 +160,19 @@ export const CONFIG = {
     color: { shallow: 0x58c4c0, deep: 0x0a3d5c, foam: 0xf4fbff },
     absorb: 0.11, colorDepth: 0.22, minOpacity: 0.16, maxOpacity: 0.93, roughness: 0.1,
     waves: {
-      rippleGain: 1.2, splashGain: 2.5, choppy: 1.2, shoreFade: 1.2, shoreKeep: 0.45, swash: 0.3, swashSpeed: 0.8, meshCell: 0.75, detail: 0.035, detailScale: 1.9, fadeNear: 40, fadeFar: 160, farKeep: 0.4,
+      rippleGain: 1.2, splashGain: 2.5, choppy: 1.2, shoreFade: 1.2, shoreKeep: 0.25, bankFade: 0.3, edgeMargin: 1.5, meshCell: 0.75, detail: 0.035, detailScale: 1.9, fadeNear: 40, fadeFar: 160, farKeep: 0.4,
       layers: [
         [1, 0.2, 0.31, 0.9, 0.225], [-0.6, 1, 0.47, 1.1, 0.175], [0.3, -1, 0.83, 1.5, 0.11],
         [-1, -0.5, 1.3, 1.9, 0.075], [0.8, 0.7, 2.1, 2.4, 0.045], [-0.2, 1, 3.4, 3, 0.025],
       ],
     },
+    shore: {
+      height: 0.45, period: 5.5, rise: 0.3, draw: 0.5, phasePerDepth: 0.35, reach: 0.9, shallowStart: 0.8, shallowEnd: 3, hug: 0.006,
+      wobble: [[0.37, 0.23, 0.3], [0.19, -0.41, 0.2]],
+    },
     sim: { speed: 11, step: 1 / 60, shoreDamp: 0.86, deepDamp: 0.9935, shoreFull: 0.8, edge: 8, limit: 0.6, foamDecay: 0.55, crest: 0.05, crestGain: 4, idle: 0.0003 },
     ripple: { wake: 0.1, bow: 0.7, stride: 1.5, step: 0.03, stepCells: 2, stepDepth: 0.35, headSplash: 0.05, splashScale: 0.05, splashSpeed: 0.02, splashMin: 0.12, splashMax: 0.6, exit: 0.5, wakeCells: 1.6, splashCells: 2.6, wakeFoamSpeed: 10, foam: 0.9 },
-    foam: { crestStart: 0.45, crestEnd: 0.8, shoreWidth: 0.9, shoreSpeed: 0.8, noiseScale: 1.1, noiseSpeed: 0.25, fineScale: 3.4, opacity: 0.92 },
+    foam: { crestStart: 0.45, crestEnd: 0.8, shoreWidth: 0.9, frontWidth: 0.85, noiseScale: 1.1, noiseSpeed: 0.25, fineScale: 3.4, opacity: 0.92 },
     glitter: { core: 9, corePower: 1600, path: 2.2, pathPower: 90, freq: 14, speed: 1.4, threshold: [0.6, 0.88], opacityGain: 0.6 },
     under: { absorb: [0.2, 0.07, 0.04], shallow: 0x2aa3b8, deep: 0x03182a, depthFade: 0.045, blendRate: 14, windowCos: [0.6, 0.72], windowOpacity: 0.08, mirrorOpacity: 0.9, tint: 0.7 },
     swim: { at: 0.55, buoyancy: 1.3, dragY: 2.6, dragXZ: 1.4, slow: 0.3, accel: 0.7, up: 46, upMax: 9, down: 46, downMax: 11, exitJump: 11, pitchSpeed: 0.9 },

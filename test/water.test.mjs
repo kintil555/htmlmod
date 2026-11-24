@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { WaterSim, blur3 } from '../src/world/WaterSim.js';
 import { CONFIG } from '../src/config.js';
+import { waveFade, swashLift, swashBump, swashPhase } from '../src/world/Shore.js';
 
 const nx = 96; const nz = 80; const cell = 0.7;
 const depth = new Float32Array(nx * nz).fill(10);
@@ -45,3 +46,32 @@ const out = new Uint16Array(nx * nz * 2);
 sim.fill(out, v => Math.round(v * 1000) + 1);
 assert.ok(out.some(v => v > 0), 'fill writes data');
 console.log('water tests ok');
+
+// --- Shoreline swash: waves run up the bank and drain back ---
+const SH = CONFIG.water.shore;
+const X = 3; const Z = 5; const T = SH.period; const steps = 600;
+const thick = (d, t) => d + swashLift(X, Z, d, t);
+/** Waterline: lowest signed depth reached by water that is wet all the way from the sea (d = 3) down the slope. */
+const waterline = (t) => { let f = 3; for (let d = 3; d >= -2; d -= 0.005) { if (thick(d, t) <= 0) break; f = d; } return f; };
+const line = []; for (let i = 0; i <= steps; i++) line.push(waterline(i / steps * T));
+
+assert.ok(Math.min(...line) < -0.1, 'uprush reaches onto the bank');
+assert.ok(Math.max(...line) > 0.15, 'backwash draws the waterline back into the water');
+assert.ok(Math.min(...line) > -SH.reach, 'run-up stays below reach');
+let turns = 0; let dir = 0;
+for (let i = 1; i < line.length; i++) { const dd = Math.sign(line[i] - line[i - 1]); if (dd && dd !== dir) { if (dir) turns++; dir = dd; } }
+assert.ok(turns >= 2 && turns <= 4, `one rise and one recede per cycle (got ${turns} turns)`);
+
+let dryHigh = true; for (let i = 0; i <= steps; i++) if (thick(-SH.reach - 0.02, i / steps * T) > 0) dryHigh = false;
+assert.ok(dryHigh, 'ground above reach stays dry');
+assert.equal(waveFade(-CONFIG.water.waves.bankFade - 0.01), 0, 'open-water waves never lift the bank');
+assert.ok(waveFade(0.5) > waveFade(0) && waveFade(0) > 0, 'waves shrink toward the waterline but do not vanish');
+
+// Uprush is faster than the backwash; crest arrives later higher up the slope.
+const peak = SH.rise; assert.ok(swashBump(peak) > 0.999 && swashBump(0) < 1e-9 && swashBump(1) < 1e-9, 'bump peaks at rise, zero at the cycle ends');
+assert.ok(SH.rise < 0.5, 'uprush shorter than backwash');
+const crestT = d => { let best = 0; let bt = 0; for (let i = 0; i < 2000; i++) { const t = i / 2000 * T; const u = swashPhase(X, Z, d, t); if (swashBump(u) > best) { best = swashBump(u); bt = t; } } return bt; };
+const lag = (crestT(-0.1) - crestT(0.1) + 2 * T) % T;
+const expected = ((0.2 * SH.phasePerDepth * T) % T + T) % T;
+assert.ok(Math.abs(lag - expected) < 0.02 * T, `crest travels shoreward (lag ${lag.toFixed(2)}s, expected ${expected.toFixed(2)}s)`);
+console.log('shore swash ok');
