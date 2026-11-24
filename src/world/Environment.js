@@ -69,8 +69,10 @@ export class Environment {
     sun.target.updateMatrixWorld(true);
 
     // Fit the orthographic shadow frustum around the whole map, in light space.
+    // Orient the shadow camera exactly as the renderer will (at the sun, looking at the target) before measuring
+    // the map in its space; without this the frustum is fitted to an identity camera and the shadow map is empty.
+    sun.shadow.updateMatrices(sun);
     const cam = sun.shadow.camera;
-    cam.updateMatrixWorld(true);
     const box = new THREE.Box3();
     for (const x of [bounds.minX, bounds.maxX]) for (const y of [bounds.minY, bounds.maxY]) for (const z of [bounds.minZ, bounds.maxZ]) {
       box.expandByPoint(new THREE.Vector3(x, y, z).applyMatrix4(cam.matrixWorldInverse));
