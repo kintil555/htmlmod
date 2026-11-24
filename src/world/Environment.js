@@ -46,7 +46,8 @@ export class Environment {
       sky.material.vertexNode = vec4(clip.xy, 0, clip.w);
     }
 
-    // Ambient light from the sky itself (no sun disc in the environment map).
+    // No sun disc in the sky, ever: SkyMesh's is far brighter than anything else in the HDR frame, so bloom and the lens flare
+    // smeared it over the geometry. The sun is drawn by PostFx instead (halo + disc, sky pixels only), also for the environment map.
     sky.showSunDisc.value = 0;
     const envScene = new THREE.Scene();
     envScene.add(sky);
@@ -55,7 +56,6 @@ export class Environment {
     scene.environment = env.texture;
     scene.environmentIntensity = L.environmentIntensity;
     pmrem.dispose();
-    sky.showSunDisc.value = 1;
     scene.add(sky);
     this.sky = sky;
 

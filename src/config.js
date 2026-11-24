@@ -127,7 +127,8 @@ export const CONFIG = {
     sunFx: {
       godrays: { steps: 60, density: 0.6, maxDensity: 0.45, distanceAttenuation: 2, resolutionScale: 0.5, intensity: 0.6, edgeRadius: 2, edgeStrength: 2 },
       bloom: { strength: 0.05, radius: 0.4, threshold: 4 },
-      glow: { disc: { power: 3000, intensity: 6 }, halo: { power: 60, intensity: 0.2 }, haze: 0.03 },
+      /** Sun in the sky (sky pixels only), after the save-ocean sky shader. Halo: color * cos^power * intensity. Disc: smoothstep(edge[0], edge[1], cos) * intensity, so edge is the cosine of the angle (outer, inner). */
+      glow: { halo: { color: 0xffe6b3, power: 8, intensity: 0.35 }, disc: { color: 0xfff7e0, edge: [0.9975, 0.9992], intensity: 2 } },
       flare: { intensity: 0.18, threshold: 0.5, ghostSamples: 4, ghostSpacing: 0.3, ghostAttenuation: 25, downSample: 4, tint: 0xfff0d8 },
     },
     /** Ambient occlusion (GTAO). `radius` is in eye heights; `strength` 0 = off, 1 = full. Always on, not part of the sun effects toggle. */

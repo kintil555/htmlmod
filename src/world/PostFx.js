@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { pass, mrt, output, normalView, mix, renderOutput, uniform, color, vec4, float, screenUV, getViewPosition, normalize, dot, pow, max, isBackgroundDepth } from 'three/tsl';
+import { pass, mrt, output, normalView, mix, renderOutput, uniform, color, vec4, float, screenUV, getViewPosition, normalize, dot, pow, max, smoothstep, isBackgroundDepth } from 'three/tsl';
 import { godrays } from 'three/addons/tsl/display/GodraysNode.js';
 import { bilateralBlur } from 'three/addons/tsl/display/BilateralBlurNode.js';
 import { depthAwareBlend } from 'three/addons/tsl/display/depthAwareBlend.js';
@@ -38,7 +38,6 @@ export class PostFx {
     aoPass.thickness.value = A.thickness;
     aoPass.samples.value = A.samples;
     const aoFactor = mix(1, aoPass.getTextureNode().sample(screenUV).r, A.strength);
-    this.plain = toScreen(vec4(sceneColor.rgb.mul(aoFactor), 1));
 
     // God rays: depth-aware march through the shadow map, bilateral blur, edge-aware composite tinted by the sun.
     const G = F.godrays;
@@ -64,15 +63,18 @@ export class PostFx {
     const rayView = normalize(getViewPosition(screenUV, float(0.5), projInverse));
     const cosAngle = max(dot(rayView, sunView), 0);
     const Gl = F.glow;
-    const sunColor = color(L.sun.color);
     // Sky pixels are the ones the depth buffer never wrote (the sky does not write depth); isBackgroundDepth knows the
-    // depth convention (reversed or not), so the mask stays exact at any distance. The sun disc is hard-masked by it
-    // so it can never shine through a building; only the wide halo may haze over geometry.
+    // depth convention (reversed or not), so the mask stays exact at any distance.
     const skyMask = isBackgroundDepth(sceneDepth.sample(screenUV).r).select(float(1), float(0));
-    const disc = pow(cosAngle, float(Gl.disc.power)).mul(Gl.disc.intensity);
-    const halo = pow(cosAngle, float(Gl.halo.power)).mul(Gl.halo.intensity);
-    const glow = vec4(sunColor.mul(disc.mul(skyMask).add(halo.mul(skyMask.mul(1 - Gl.haze).add(Gl.haze)))), 0);
-    const flareSource = vec4(sunColor.mul(disc.add(halo)).mul(skyMask), 1);
+    // The sun is part of the sky, as in the save-ocean sky shader: a soft warm halo plus a crisp disc with a smooth edge. Both are
+    // masked to sky pixels, so nothing glows over geometry. Not HDR-bright either, so bloom has nothing to smear.
+    const halo = color(Gl.halo.color).mul(pow(cosAngle, float(Gl.halo.power)).mul(Gl.halo.intensity));
+    const disc = color(Gl.disc.color).mul(smoothstep(Gl.disc.edge[0], Gl.disc.edge[1], cosAngle).mul(Gl.disc.intensity));
+    const sun = halo.add(disc).mul(skyMask);
+    const glow = vec4(sun, 0);
+    const flareSource = vec4(disc.mul(skyMask), 1);
+    // The sun itself is not a toggleable effect: it stays when sun effects are off.
+    this.plain = toScreen(vec4(sceneColor.rgb.mul(aoFactor).add(sun), 1));
 
     const Fl = F.flare;
     const flare = lensflare(flareSource, {
