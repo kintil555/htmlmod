@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
-import { reflector, vec4, color } from 'three/tsl';
+import { reflector, vec4, color, mix } from 'three/tsl';
+import { fresnel } from './Fresnel.js';
 import { CONFIG } from '../config.js';
 
 const KEY_STEP = 0.02;
@@ -32,6 +33,7 @@ function planarGroups(pos, index) {
 export function buildMirrors(pos, index, name = 'mirror') {
   const M = CONFIG.lighting.mirror;
   const tint = color(M.color);
+  const dark = color(M.dark);
   const out = [];
   for (const g of planarGroups(pos, index)) {
     const origin = new THREE.Vector3();
@@ -52,7 +54,7 @@ export function buildMirrors(pos, index, name = 'mirror') {
       geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
       const refl = reflector({ resolutionScale: M.resolution, bounces: false, samples: M.multisample });
       const material = new THREE.MeshBasicNodeMaterial({ side: THREE.FrontSide });
-      material.colorNode = vec4(refl.rgb.mul(tint), 1);
+      material.colorNode = vec4(mix(dark, refl.rgb.mul(tint), mix(M.base, 1, fresnel(M.power))), 1);
       const r = new THREE.Mesh(geo, material);
       r.add(refl.target);
       r.name = name;

@@ -87,8 +87,26 @@ export const CONFIG = {
     hemisphere: { sky: 0xa9c8ff, ground: 0x7d705f, intensity: 0.12 },
     shadow: { mapSize: 4096, bias: -0.0003, normalBias: 0.05, radius: 2 },
     fog: { color: 0xc3d6ea, density: 0.0016 },
+    /** Fallback surface for map materials that match nothing in `surfaces`. */
     material: { roughness: 0.9, metalness: 0 },
-    mirror: { color: 0xdbe6e6, resolution: 0.75, multisample: 4, offset: 0.01 },
+    /**
+     * Surface classes, picked by the first `match` hitting the baked material name. roughness/metalness shape the
+     * highlight; `specular` (0..1) is the Fresnel reflectance of non-metals (how much sky shows at grazing angles);
+     * `env` scales the sky reflection for that class.
+     */
+    surfaces: [
+      { id: 'metal', match: /metal|duct|ladder|bell|rooftop|citadel/i, roughness: 0.32, metalness: 0.6, specular: 1, env: 2.5 },
+      { id: 'plastic', match: /plastic|florescent|switch|doll/i, roughness: 0.3, metalness: 0, specular: 1, env: 2 },
+      { id: 'wood', match: /furnituretable|wood/i, roughness: 0.55, metalness: 0, specular: 0.6, env: 1.5 },
+      { id: 'fabric', match: /couch/i, roughness: 0.95, metalness: 0, specular: 0.25, env: 1 },
+      { id: 'brick', match: /brick/i, roughness: 0.9, metalness: 0, specular: 0.35, env: 1 },
+      { id: 'plaster', match: /plaster/i, roughness: 0.8, metalness: 0, specular: 0.5, env: 1.2 },
+      { id: 'floor', match: /floor|stair|ground|dev/i, roughness: 0.62, metalness: 0, specular: 0.7, env: 1.8 },
+      { id: 'concrete', match: /concrete|wall|building_template|color_room/i, roughness: 0.82, metalness: 0, specular: 0.5, env: 1.3 },
+      { id: 'grass', match: /grass/i, roughness: 1, metalness: 0, specular: 0.15, env: 0.6 },
+    ],
+    /** Glass reflects `base` of the scene head-on and fully at grazing angles (Fresnel), over a dark glass tint. */
+    mirror: { color: 0xdbe6e6, resolution: 0.75, multisample: 4, offset: 0.01, base: 0.5, power: 4, dark: 0x1a2a30 },
     /**
      * Post effects around the sun (src/world/PostFx.js). Glow shapes are cos(angle to sun)^power: a higher power
      * is a tighter blob. `haze` is how much halo leaks over geometry (0 = only on open sky).
@@ -101,7 +119,8 @@ export const CONFIG = {
     },
     /** Ambient occlusion (GTAO). `radius` is in eye heights; `strength` 0 = off, 1 = full. Always on, not part of the sun effects toggle. */
     ao: { radius: 0.35, thickness: 1, samples: 16, resolutionScale: 0.5, strength: 0.85 },
-    water: { color: 0x3d7d9c, opacity: 0.72, roughness: 0.15 },
+    /** Water is clearest looking down and turns opaque, mirroring the sky, at grazing angles (Fresnel). */
+    water: { color: 0x3d7d9c, opacity: 0.6, roughness: 0.05, power: 3 },
   },
   limits: { maxNextbots: 30, maxProps: 80 },
   catchState: { respawnDelay: 1.6, invulnerable: 2.0, pushRadius: 14 },

@@ -1,7 +1,9 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
+import { mix } from 'three/tsl';
 import { CONFIG } from '../config.js';
 import { Assets } from '../core/Assets.js';
 import { buildMirrors } from './Mirror.js';
+import { fresnel } from './Fresnel.js';
 
 async function fetchOk(url) {
   const r = await fetch(url);
@@ -23,19 +25,30 @@ export async function loadMapData(def, onProgress = () => {}) {
   return { def, meta, buffer };
 }
 
+/** First surface class whose pattern matches the baked material name (CONFIG.lighting.surfaces), or the fallback. */
+export function surfaceFor(name) {
+  const L = CONFIG.lighting;
+  return L.surfaces.find(c => c.match.test(name)) ?? { ...L.material, specular: 0.5, env: 1 };
+}
+
 function makeMaterial(m, texture) {
   const L = CONFIG.lighting;
   if (m.water) {
-    return new THREE.MeshStandardMaterial({
-      color: L.water.color, transparent: true, opacity: L.water.opacity, roughness: L.water.roughness,
+    const water = new THREE.MeshPhysicalNodeMaterial({
+      color: L.water.color, transparent: true, roughness: L.water.roughness,
       metalness: 0, depthWrite: false, side: THREE.DoubleSide,
     });
+    water.opacityNode = mix(L.water.opacity, 1, fresnel(L.water.power));
+    return water;
   }
-  return new THREE.MeshStandardMaterial({
+  const surface = surfaceFor(m.name);
+  return new THREE.MeshPhysicalMaterial({
     map: texture,
     color: new THREE.Color().setRGB(m.color[0], m.color[1], m.color[2]),
-    roughness: L.material.roughness,
-    metalness: L.material.metalness,
+    roughness: surface.roughness,
+    metalness: surface.metalness,
+    specularIntensity: surface.specular,
+    envMapIntensity: surface.env,
     side: THREE.DoubleSide,
     alphaTest: m.alpha === 'mask' ? 0.5 : 0,
     polygonOffset: m.decal,
