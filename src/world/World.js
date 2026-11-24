@@ -3,6 +3,7 @@ import { CONFIG } from '../config.js';
 import { Collision } from './Collision.js';
 import { collectTriangles } from './MapLoader.js';
 import { NavGraph } from './NavGraph.js';
+import { SkyAmbient } from './SkyAmbient.js';
 
 /** Owns the scene, the baked map (render meshes + colliders) and the entity list. */
 export class World {
@@ -17,7 +18,9 @@ export class World {
     this.decor = map.group.children.filter(m => !m.userData.noAim);
     this.scene.add(map.group);
     this.collision = new Collision({ step: CONFIG.player.stepHeight, floorY: map.bounds.minY - CONFIG.world.floorDepth });
-    for (const { world, index } of collectTriangles(map.group)) this.collision.addTriangles(world, index);
+    const triangles = collectTriangles(map.group);
+    for (const { world, index } of triangles) this.collision.addTriangles(world, index);
+    SkyAmbient.bake(triangles, map.bounds);
     this.nav = null;
   }
 

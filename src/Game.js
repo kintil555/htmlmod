@@ -38,7 +38,9 @@ export class Game {
 
   async boot() {
     // WebGPU, with three.js' automatic WebGL2 fallback. Antialiasing is FXAA in PostFx, not MSAA.
-    this.renderer = new WebGPURenderer({ canvas: this.canvas, antialias: false, powerPreference: 'high-performance' });
+    // Reversed float depth: near-constant precision over the whole 0.1..600 range (no z-fighting or shadow/AO leaks at
+    // distance). three.js falls back to the normal depth buffer by itself when the backend cannot do it.
+    this.renderer = new WebGPURenderer({ canvas: this.canvas, antialias: false, powerPreference: 'high-performance', reversedDepthBuffer: true });
     await this.renderer.init();
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     Assets.anisotropy = Math.min(8, this.renderer.getMaxAnisotropy());

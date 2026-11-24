@@ -80,11 +80,18 @@ export const CONFIG = {
   /** Like Source's light_environment, with Valve's own values (HL2 sky list, d2_coast: sun RGB 243 238 224 at -45 degrees, skylight RGB 172 196 204 at about 1/8 of the sun): a nearly white sun with dynamic shadows plus a flat, cool skylight (hemisphere) as ambient; GTAO adds the contact darkness. Sun, sky, ambient light, fog, tone mapping. Elevation/azimuth in degrees; azimuth 0 = +Z, 90 = +X. */
   lighting: {
     toneMapping: 'neutral',
-    exposure: 0.92,
+    exposure: 0.88,
     sun: { elevation: 45, azimuth: 215, intensity: 3.4, color: 0xf3eee0 },
     sky: { turbidity: 3, rayleigh: 1.2, mieCoefficient: 0.004, mieDirectionalG: 0.82, scale: 450000, clouds: { coverage: 0.5, density: 0.55, elevation: 0.5 } },
     environmentIntensity: 0.1,
-    hemisphere: { sky: 0xacc4cc, ground: 0x7a7468, intensity: 0.46 },
+    hemisphere: { sky: 0xacc4cc, ground: 0x8c7e68, intensity: 0.66 },
+    /**
+     * Ambient visibility (world/SkyAmbient.js). The sky fill and environment light are scaled by how much sky a surface sees,
+     * so spots under roofs, balconies and indoors get `minimum` of the ambient (bounce light) instead of the open-sky amount.
+     * Distances are in eye heights: `reach` probe radius, `lift` push out along the normal, `soft` height blend, `bias` slack.
+     * `taps` probes per pixel, `resolution` height-field cells along the map's longer side.
+     */
+    skyAmbient: { resolution: 2048, taps: 12, reach: 2.5, lift: 0.25, soft: 0.6, bias: 0.1, minimum: 0.3 },
     /**
      * Sun shadows are cascaded shadow maps (three/addons/csm): `cascades` maps of `mapSize`, splitting the view out to `maxFar`
      * world units (nearest cascade is the sharpest). `lightMargin` must exceed the map's height. Bias is a fraction of the
@@ -115,16 +122,16 @@ export const CONFIG = {
     mirror: { color: 0xdbe6e6, resolution: 0.75, multisample: 4, offset: 0.01, base: 0.5, power: 4, dark: 0x1a2a30 },
     /**
      * Post effects around the sun (src/world/PostFx.js). Glow shapes are cos(angle to sun)^power: a higher power
-     * is a tighter blob. `haze` is how much halo leaks over geometry (0 = only on open sky).
+     * is a tighter blob. `haze` is how much of the halo (never the disc) shows over geometry (0 = only on open sky).
      */
     sunFx: {
       godrays: { steps: 60, density: 0.6, maxDensity: 0.45, distanceAttenuation: 2, resolutionScale: 0.5, intensity: 0.6, edgeRadius: 2, edgeStrength: 2 },
       bloom: { strength: 0.05, radius: 0.4, threshold: 4 },
-      glow: { disc: { power: 3000, intensity: 6 }, halo: { power: 60, intensity: 0.2 }, haze: 0.08 },
+      glow: { disc: { power: 3000, intensity: 6 }, halo: { power: 60, intensity: 0.2 }, haze: 0.03 },
       flare: { intensity: 0.18, threshold: 0.5, ghostSamples: 4, ghostSpacing: 0.3, ghostAttenuation: 25, downSample: 4, tint: 0xfff0d8 },
     },
     /** Ambient occlusion (GTAO). `radius` is in eye heights; `strength` 0 = off, 1 = full. Always on, not part of the sun effects toggle. */
-    ao: { radius: 0.6, thickness: 1, samples: 16, resolutionScale: 0.5, strength: 0.9 },
+    ao: { radius: 0.6, thickness: 1, samples: 16, resolutionScale: 0.5, strength: 0.8 },
     /** Water is clearest looking down and turns opaque, mirroring the sky, at grazing angles (Fresnel). */
     water: { color: 0x3d7d9c, opacity: 0.6, roughness: 0.05, power: 3 },
   },

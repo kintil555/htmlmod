@@ -4,6 +4,7 @@ import { CONFIG } from '../config.js';
 import { Assets } from '../core/Assets.js';
 import { buildMirrors } from './Mirror.js';
 import { fresnel } from './Fresnel.js';
+import { SkyAmbient } from './SkyAmbient.js';
 
 async function fetchOk(url) {
   const r = await fetch(url);
@@ -42,7 +43,7 @@ function makeMaterial(m, texture) {
     return water;
   }
   const surface = surfaceFor(m.name);
-  return new THREE.MeshPhysicalNodeMaterial({
+  const material = new THREE.MeshPhysicalNodeMaterial({
     map: texture,
     color: new THREE.Color().setRGB(m.color[0], m.color[1], m.color[2]),
     roughness: surface.roughness,
@@ -55,6 +56,9 @@ function makeMaterial(m, texture) {
     polygonOffsetFactor: m.decal ? -2 : 0,
     polygonOffsetUnits: m.decal ? -2 : 0,
   });
+  // Ambient (sky fill + environment) only where the sky is visible; the sun is unaffected.
+  material.aoNode = SkyAmbient.node;
+  return material;
 }
 
 /**

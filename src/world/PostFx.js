@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { pass, mrt, output, normalView, mix, renderOutput, uniform, color, vec4, float, screenUV, getViewPosition, normalize, dot, pow, max, step } from 'three/tsl';
+import { pass, mrt, output, normalView, mix, renderOutput, uniform, color, vec4, float, screenUV, getViewPosition, normalize, dot, pow, max, isBackgroundDepth } from 'three/tsl';
 import { godrays } from 'three/addons/tsl/display/GodraysNode.js';
 import { bilateralBlur } from 'three/addons/tsl/display/BilateralBlurNode.js';
 import { depthAwareBlend } from 'three/addons/tsl/display/depthAwareBlend.js';
@@ -64,13 +64,15 @@ export class PostFx {
     const rayView = normalize(getViewPosition(screenUV, float(0.5), projInverse));
     const cosAngle = max(dot(rayView, sunView), 0);
     const Gl = F.glow;
-    const shape = pow(cosAngle, float(Gl.disc.power)).mul(Gl.disc.intensity)
-      .add(pow(cosAngle, float(Gl.halo.power)).mul(Gl.halo.intensity));
     const sunColor = color(L.sun.color);
-    // Sky pixels are the ones the depth buffer never wrote (the sky does not write depth).
-    const skyMask = step(0.99999, sceneDepth.sample(screenUV).r);
-    const glow = vec4(sunColor.mul(shape).mul(skyMask.mul(1 - Gl.haze).add(Gl.haze)), 0);
-    const flareSource = vec4(sunColor.mul(shape).mul(skyMask), 1);
+    // Sky pixels are the ones the depth buffer never wrote (the sky does not write depth); isBackgroundDepth knows the
+    // depth convention (reversed or not), so the mask stays exact at any distance. The sun disc is hard-masked by it
+    // so it can never shine through a building; only the wide halo may haze over geometry.
+    const skyMask = isBackgroundDepth(sceneDepth.sample(screenUV).r).select(float(1), float(0));
+    const disc = pow(cosAngle, float(Gl.disc.power)).mul(Gl.disc.intensity);
+    const halo = pow(cosAngle, float(Gl.halo.power)).mul(Gl.halo.intensity);
+    const glow = vec4(sunColor.mul(disc.mul(skyMask).add(halo.mul(skyMask.mul(1 - Gl.haze).add(Gl.haze)))), 0);
+    const flareSource = vec4(sunColor.mul(disc.add(halo)).mul(skyMask), 1);
 
     const Fl = F.flare;
     const flare = lensflare(flareSource, {

@@ -1,6 +1,7 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import { Entity } from './Entity.js';
 import { concreteTexture } from '../world/Procedural.js';
+import { SkyAmbient } from '../world/SkyAmbient.js';
 
 let concrete = null;
 const geos = new Map();
@@ -16,7 +17,11 @@ function shared(def) {
     geos.set(key, g);
     edgeGeos.set(key, new THREE.EdgesGeometry(g));
   }
-  if (!mats.has(def.color)) mats.set(def.color, new THREE.MeshLambertMaterial({ map: concrete, color: def.color }));
+  if (!mats.has(def.color)) {
+    const mat = new THREE.MeshLambertNodeMaterial({ map: concrete, color: def.color });
+    mat.aoNode = SkyAmbient.node;
+    mats.set(def.color, mat);
+  }
   return { geo: geos.get(key), edges: edgeGeos.get(key), mat: mats.get(def.color) };
 }
 
