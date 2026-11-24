@@ -2,6 +2,7 @@
 export const STR = {
   menu: { play: 'Play', help: 'Help', settings: 'Settings', resume: 'Resume', quit: 'Main Menu', back: 'Back' },
   loading: 'Loading…',
+  loadingStage: { assets: 'Loading assets', map: 'Loading map', shaders: 'Preparing graphics' },
   settings: { title: 'Settings', empty: 'No options yet.' },
   help: {
     title: 'Help',
@@ -19,6 +20,9 @@ export const STR = {
       { title: 'Spawn menu', lines: [
         'Pick a tab, then click an item. It spawns where your crosshair points.',
         'Clear All removes everything you spawned.',
+      ] },
+      { title: 'Credits', lines: [
+        'Map: Gm_construct by CHANO (sketchfab.com/Chanino), CC BY 4.0.',
       ] },
       { title: 'Dodging nextbots', lines: [
         'You are faster than every nextbot while sprinting, but they never stop chasing.',

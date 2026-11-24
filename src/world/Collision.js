@@ -1,23 +1,83 @@
 /**
- * Axis-aligned box colliders in the XZ plane (with a top height), circle-vs-box resolution.
+ * Axis-aligned box colliders in the XZ plane, circle-vs-box resolution.
  * Pure module (no three.js) so it can be unit tested in Node.
- * A box is {minX,maxX,minZ,maxZ,top}. Boxes whose top is within `step` of the mover's feet are walkable.
+ *
+ * A box is {minX,maxX,minZ,maxZ,top,bottom?}. `bottom` defaults to -Infinity (solid down to the floor); a finite
+ * bottom makes a slab or overhang that movers can pass under (see the `height` argument below).
+ * Boxes whose top is within `step` of the mover's feet are walkable. A spatial grid keeps queries cheap for
+ * maps with tens of thousands of boxes.
  */
 export const STEP_HEIGHT = 0.35;
+const GRID_CELL = 8;
 
 export class Collision {
-  constructor() { this.boxes = []; }
-  add(box) { this.boxes.push(box); return box; }
-  remove(box) {
-    const i = this.boxes.indexOf(box);
-    if (i >= 0) this.boxes.splice(i, 1);
+  /** @param {{step?: number, floorY?: number}} opts step = max walkable rise, floorY = height of the infinite floor. */
+  constructor({ step = STEP_HEIGHT, floorY = 0 } = {}) {
+    this.step = step;
+    this.floorY = floorY;
+    this.boxes = [];
+    this._grid = new Map();
+    this._stamp = 0;
+    this._hits = [];
   }
 
-  /** Pushes circle `p` ({x,z}) out of solid boxes. Returns last contact normal {nx,nz} or null. */
-  resolveCircle(p, r, feetY = 0) {
+  add(box) {
+    if (box.bottom === undefined) box.bottom = -Infinity;
+    this.boxes.push(box);
+    this._index(box);
+    return box;
+  }
+
+  addAll(boxes) { for (const b of boxes) this.add(b); }
+
+  remove(box) {
+    const i = this.boxes.indexOf(box);
+    if (i < 0) return;
+    this.boxes.splice(i, 1);
+    this._cells(box, key => {
+      const list = this._grid.get(key);
+      list.splice(list.indexOf(box), 1);
+      if (!list.length) this._grid.delete(key);
+    });
+  }
+
+  _cells(b, fn) {
+    const x0 = Math.floor(b.minX / GRID_CELL); const x1 = Math.floor(b.maxX / GRID_CELL);
+    const z0 = Math.floor(b.minZ / GRID_CELL); const z1 = Math.floor(b.maxZ / GRID_CELL);
+    for (let ix = x0; ix <= x1; ix++) for (let iz = z0; iz <= z1; iz++) fn(ix * 65536 + iz);
+  }
+
+  _index(b) {
+    this._cells(b, key => {
+      const list = this._grid.get(key);
+      if (list) list.push(b); else this._grid.set(key, [b]);
+    });
+  }
+
+  /** Unique boxes overlapping the XZ rectangle. The returned array is reused: consume it before the next query. */
+  _near(minX, maxX, minZ, maxZ) {
+    const out = this._hits; out.length = 0;
+    const stamp = ++this._stamp;
+    const x0 = Math.floor(minX / GRID_CELL); const x1 = Math.floor(maxX / GRID_CELL);
+    const z0 = Math.floor(minZ / GRID_CELL); const z1 = Math.floor(maxZ / GRID_CELL);
+    for (let ix = x0; ix <= x1; ix++) {
+      for (let iz = z0; iz <= z1; iz++) {
+        const list = this._grid.get(ix * 65536 + iz);
+        if (!list) continue;
+        for (const b of list) if (b._s !== stamp) { b._s = stamp; out.push(b); }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Pushes circle `p` ({x,z}) out of solid boxes. Returns last contact normal {nx,nz} or null.
+   * `height` is the mover's body height: boxes that start above feetY + height are overhead and ignored.
+   */
+  resolveCircle(p, r, feetY = 0, height = Infinity) {
     let hit = null;
-    for (const b of this.boxes) {
-      if (b.top <= feetY + STEP_HEIGHT) continue;
+    for (const b of this._near(p.x - r, p.x + r, p.z - r, p.z + r)) {
+      if (b.top <= feetY + this.step || b.bottom >= feetY + height) continue;
       const cx = Math.max(b.minX, Math.min(p.x, b.maxX));
       const cz = Math.max(b.minZ, Math.min(p.z, b.maxZ));
       const dx = p.x - cx;
@@ -42,12 +102,12 @@ export class Collision {
     return hit;
   }
 
-  /** Highest walkable surface under a circle at height y (0 = ground). */
+  /** Highest walkable surface under a circle at height y (`floorY` when there is none). */
   groundHeight(x, z, r, y) {
-    let g = 0;
+    let g = this.floorY;
     const rr = r * 0.9;
-    for (const b of this.boxes) {
-      if (b.top > y + STEP_HEIGHT || b.top <= g) continue;
+    for (const b of this._near(x - rr, x + rr, z - rr, z + rr)) {
+      if (b.top > y + this.step || b.top <= g) continue;
       const cx = Math.max(b.minX, Math.min(x, b.maxX));
       const cz = Math.max(b.minZ, Math.min(z, b.maxZ));
       const dx = x - cx; const dz = z - cz;
@@ -56,14 +116,30 @@ export class Collision {
     return g;
   }
 
+  /** Lowest underside above a mover's head (feetY + height) over a circle; Infinity when the way up is open. */
+  ceilingHeight(x, z, r, feetY, height) {
+    let c = Infinity;
+    const rr = r * 0.9;
+    const head = feetY + height;
+    for (const b of this._near(x - rr, x + rr, z - rr, z + rr)) {
+      if (b.bottom < head || b.bottom >= c) continue;
+      const cx = Math.max(b.minX, Math.min(x, b.maxX));
+      const cz = Math.max(b.minZ, Math.min(z, b.maxZ));
+      const dx = x - cx; const dz = z - cz;
+      if (dx * dx + dz * dz < rr * rr || (dx === 0 && dz === 0)) c = b.bottom;
+    }
+    return c;
+  }
+
   /**
    * Swept circle (radius r) from (x,z) along unit dir (dx,dz) up to `dist`.
-   * Returns {box, dist} for the nearest box taller than feetY + STEP_HEIGHT, or null.
+   * Returns {box, dist} for the nearest box taller than feetY + step (and not overhead), or null.
    */
-  sweepBlocker(x, z, dx, dz, dist, r, feetY = 0) {
+  sweepBlocker(x, z, dx, dz, dist, r, feetY = 0, height = Infinity) {
     let best = null;
-    for (const b of this.boxes) {
-      if (b.top <= feetY + STEP_HEIGHT) continue;
+    const ex = x + dx * dist; const ez = z + dz * dist;
+    for (const b of this._near(Math.min(x, ex) - r, Math.max(x, ex) + r, Math.min(z, ez) - r, Math.max(z, ez) + r)) {
+      if (b.top <= feetY + this.step || b.bottom >= feetY + height) continue;
       let t0 = 0; let t1 = dist;
       const axes = [[x, dx, b.minX - r, b.maxX + r], [z, dz, b.minZ - r, b.maxZ + r]];
       let ok = true;
@@ -80,13 +156,14 @@ export class Collision {
   }
 
   /**
-   * Nearest wall within `reach` of a circle's edge, taller than feetY + STEP_HEIGHT.
+   * Nearest wall within `reach` of a circle's edge, taller than feetY + step (overhead boxes ignored, as in resolveCircle).
    * Returns {nx,nz} (unit normal pointing away from the wall) or null.
    */
-  wallContact(x, z, r, reach, feetY = 0) {
+  wallContact(x, z, r, reach, feetY = 0, height = Infinity) {
     let best = null; let bestD = Infinity;
-    for (const b of this.boxes) {
-      if (b.top <= feetY + STEP_HEIGHT) continue;
+    const m = r + reach;
+    for (const b of this._near(x - m, x + m, z - m, z + m)) {
+      if (b.top <= feetY + this.step || b.bottom >= feetY + height) continue;
       const cx = Math.max(b.minX, Math.min(x, b.maxX));
       const cz = Math.max(b.minZ, Math.min(z, b.maxZ));
       const dx = x - cx; const dz = z - cz;

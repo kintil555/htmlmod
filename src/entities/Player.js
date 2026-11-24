@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 
-/** First-person controller. Feet position is `pos`; camera sits at eye height. */
+/** First-person controller. Feet position is `pos`; camera sits at eye height. `spawn` = {x,y,z,yaw}. */
 export class Player {
-  constructor(camera) {
+  constructor(camera, spawn) {
     this.camera = camera;
+    this.spawn = spawn;
+    this.eyeLag = 0;
     this.camera.rotation.order = 'YXZ';
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
@@ -23,8 +25,9 @@ export class Player {
 
   respawn() {
     this.rag = null;
-    const s = CONFIG.player.spawn;
-    this.pos.set(s.x, 0, s.z);
+    const s = this.spawn;
+    this.eyeLag = 0;
+    this.pos.set(s.x, s.y, s.z);
     this.vel.set(0, 0, 0);
     this.yaw = s.yaw;
     this.pitch = 0;
@@ -66,14 +69,12 @@ export class Player {
     g.pos.x += g.vel.x * dt;
     g.pos.z += g.vel.z * dt;
     const feet = g.pos.y - hr;
-    const hit = world.collision.resolveCircle(g.pos, hr, feet);
+    const hit = world.collision.resolveCircle(g.pos, hr, feet, hr * 2);
     if (hit) {
       const vd = g.vel.x * hit.nx + g.vel.z * hit.nz;
       if (vd < 0) { g.vel.x -= (1 + r.restitution) * vd * hit.nx; g.vel.z -= (1 + r.restitution) * vd * hit.nz; }
     }
-    const lim = CONFIG.world.halfSize - 1;
-    g.pos.x = Math.max(-lim, Math.min(lim, g.pos.x));
-    g.pos.z = Math.max(-lim, Math.min(lim, g.pos.z));
+    world.clamp(g.pos, hr);
 
     const prevY = g.pos.y;
     g.pos.y += g.vel.y * dt;
@@ -153,25 +154,34 @@ export class Player {
     // Horizontal move + collide.
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
-    const hit = world.collision.resolveCircle(this.pos, this.radius, this.pos.y);
+    const hit = world.collision.resolveCircle(this.pos, this.radius, this.pos.y, c.height);
     if (hit) {
       const vd = this.vel.x * hit.nx + this.vel.z * hit.nz;
       if (vd < 0) { this.vel.x -= vd * hit.nx; this.vel.z -= vd * hit.nz; }
     }
-    const lim = CONFIG.world.halfSize - 1;
-    this.pos.x = Math.max(-lim, Math.min(lim, this.pos.x));
-    this.pos.z = Math.max(-lim, Math.min(lim, this.pos.z));
+    world.clamp(this.pos, this.radius);
 
     // Vertical.
     const prevY = this.pos.y;
+    const wasGround = this.onGround;
     this.vel.y -= c.gravity * dt;
     this.pos.y += this.vel.y * dt;
+    if (this.vel.y > 0) {
+      const ceil = world.collision.ceilingHeight(this.pos.x, this.pos.z, this.radius, prevY, c.height);
+      if (this.pos.y + c.height > ceil) { this.pos.y = ceil - c.height; this.vel.y = 0; }
+    }
     const ground = world.collision.groundHeight(this.pos.x, this.pos.z, this.radius, prevY);
     if (this.pos.y <= ground && this.vel.y <= 0) {
       this.pos.y = ground; this.vel.y = 0; this.onGround = true;
     } else {
       this.onGround = false;
     }
+    // Stairs and slopes are stepped: keep the camera where it was and let it ease to the new height.
+    const rise = this.pos.y - prevY;
+    if (wasGround && this.onGround && Math.abs(rise) > 1e-4 && Math.abs(rise) <= c.stepHeight + 0.01) {
+      this.eyeLag = Math.max(-c.stepHeight, Math.min(c.stepHeight, this.eyeLag - rise));
+    }
+    this.eyeLag *= Math.exp(-c.stepSmooth * dt);
 
     const fov = this.sprinting && this.speed > c.walkSpeed ? c.sprintFov : c.fov;
     const nf = this.camera.fov + (fov - this.camera.fov) * Math.min(1, dt * 8);
@@ -186,7 +196,7 @@ export class Player {
    */
   _wallJump(world, wx, wz, hasInput, sin, cos) {
     const w = CONFIG.player.wallJump;
-    const n = world.collision.wallContact(this.pos.x, this.pos.z, this.radius, w.reach, this.pos.y);
+    const n = world.collision.wallContact(this.pos.x, this.pos.z, this.radius, w.reach, this.pos.y, CONFIG.player.height);
     if (!n) return;
     let dx = wx; let dz = wz;
     if (!hasInput) { dx = -sin; dz = -cos; }
@@ -205,7 +215,7 @@ export class Player {
   }
 
   syncCamera() {
-    this.camera.position.set(this.pos.x, this.pos.y + CONFIG.player.eyeHeight, this.pos.z);
+    this.camera.position.set(this.pos.x, this.pos.y + CONFIG.player.eyeHeight + this.eyeLag, this.pos.z);
     this.camera.rotation.set(this.pitch, this.yaw, 0);
   }
 }

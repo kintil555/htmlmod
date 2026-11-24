@@ -10,7 +10,7 @@ One game, one style. Everything is a library. **Extend, never duplicate.**
 5. No magic numbers for gameplay. Put them in `src/config.js`.
 6. Content is data in registries. Do not edit engine code to add content.
 7. Do not touch unrelated files. Do not leave TODOs or placeholders.
-8. Run `node test/logic.test.mjs` after touching `steering.js` or `Collision.js`.
+8. Run `node test/logic.test.mjs` after touching `steering.js`, `Collision.js` or `colliders.js`.
 
 ## Recipes
 **Add a nextbot:** put `assets/nextbots/<id>.png` (transparent PNG), add one line to `src/content/nextbots.js`. It appears in the Q menu automatically.
@@ -25,11 +25,16 @@ One game, one style. Everything is a library. **Extend, never duplicate.**
 
 **Add a screen:** build it in `ui/screens.js` from `ui.js` components, register it in `Game.boot()`.
 
+**Add a map:** run `python3 tools/bake_map.py <glTF dir> assets/maps/<id>` (needs numpy + Pillow; build-time only), then add one entry to `src/content/maps.js` (`eyeHeight`, `spawn`). Set `CONFIG.world.map` to load it. The map is scaled at load so its player eye height equals `CONFIG.player.eyeHeight`. Keep the author's license file next to the map and credit it in `STR.help`.
+
+**Lighting/sky:** all numbers live in `CONFIG.lighting`; code is `world/Environment.js`. Shadows are static; they re-render only when a prop is added or removed (`entity.castsShadow = true`).
+
 **Add a new content file:** import it in `src/content/index.js`.
 
 ## Layout
 - `core/` engine utilities: Events, Registry, Settings, Assets, Input
-- `world/` scene, colliders, procedural textures
+- `world/` World, Collision (boxes with optional `bottom`), MapLoader, Environment (sky/sun), colliders decoder, procedural textures
+- `tools/` build-time scripts (map baker), not shipped
 - `entities/` Entity, Player, Nextbot, Prop, steering (pure math)
 - `content/` data: nextbots, props, spawn tabs, settings, strings
 - `ui/` components, screens, spawn menu, HUD, theme.css

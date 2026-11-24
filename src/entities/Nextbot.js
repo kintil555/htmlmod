@@ -22,7 +22,7 @@ function materialFor(def, texture) {
  * id, name, texture, height, speed, turnRate, accel, decel.
  */
 export class Nextbot extends Entity {
-  constructor(def, texture, x, z, face) {
+  constructor(def, texture, x, z, face, y = 0) {
     super('nextbot');
     this.def = def;
     this.displayName = def.name;
@@ -35,7 +35,7 @@ export class Nextbot extends Entity {
     this.goal = { x: face.x, z: face.z };
     this.repathT = Math.random() * CONFIG.nextbot.repathInterval;
     this.phase = Math.random() * 6;
-    this.y = 0;
+    this.y = y;
     this.vy = 0;
     this.onGround = true;
     this.jumpCd = 0;
@@ -51,7 +51,7 @@ export class Nextbot extends Entity {
     shadow.position.y = 0.03;
     this.shadow = shadow;
     this.object3d.add(shadow, this.mesh);
-    this.object3d.position.set(x, 0, z);
+    this.object3d.position.set(x, y, z);
   }
 
   /** True when this bot is touching the player (catch). */
@@ -76,7 +76,7 @@ export class Nextbot extends Entity {
     const dx = sp > 1 ? s.vx / sp : Math.sin(s.heading);
     const dz = sp > 1 ? s.vz / sp : Math.cos(s.heading);
     const reach = Math.max(n.lookAheadMin, sp * n.lookAheadTime) + this.radius;
-    const blk = this.world.collision.sweepBlocker(s.x, s.z, dx, dz, reach, this.radius, this.y);
+    const blk = this.world.collision.sweepBlocker(s.x, s.z, dx, dz, reach, this.radius, this.y, n.bodyHeight);
     const plan = planObstacle(blk, this.y, Math.max(sp, 1), n.jumpSpeed, n.gravity, this.radius, n, targetAbove);
     if (plan === 'jump') this._jump();
     else if (plan === 'climb') { this.vy = n.climbSpeed; this.onGround = false; }
@@ -104,20 +104,22 @@ export class Nextbot extends Entity {
       stepChaser(s, this.goal.x, this.goal.z, dt, this.params);
     }
     if (this.jumpCd > 0) this.jumpCd -= dt;
-    const hit = this.world.collision.resolveCircle(s, this.radius, this.y);
+    const hit = this.world.collision.resolveCircle(s, this.radius, this.y, CONFIG.nextbot.bodyHeight);
     if (hit) {
       const vd = s.vx * hit.nx + s.vz * hit.nz;
       if (vd < 0) { s.vx -= vd * hit.nx; s.vz -= vd * hit.nz; }
       s.avx = hit.nx; s.avz = hit.nz; s.avoidT = 0.4;
     }
-    const lim = CONFIG.world.halfSize - this.radius;
-    s.x = Math.max(-lim, Math.min(lim, s.x));
-    s.z = Math.max(-lim, Math.min(lim, s.z));
+    this.world.clamp(s, this.radius);
 
     const gv = CONFIG.nextbot;
     const prevY = this.y;
     this.vy -= gv.gravity * dt;
     this.y += this.vy * dt;
+    if (this.vy > 0) {
+      const ceil = this.world.collision.ceilingHeight(s.x, s.z, this.radius, prevY, gv.bodyHeight);
+      if (this.y + gv.bodyHeight > ceil) { this.y = ceil - gv.bodyHeight; this.vy = 0; }
+    }
     const ground = this.world.collision.groundHeight(s.x, s.z, this.radius, prevY);
     if (this.y <= ground && this.vy <= 0) { this.y = ground; this.vy = 0; this.onGround = true; } else this.onGround = false;
     this.shadow.position.y = ground - this.y + 0.03;

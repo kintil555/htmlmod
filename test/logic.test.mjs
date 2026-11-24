@@ -107,3 +107,33 @@ assert.ok(near && near.nz === -1 && near.nx === 0, 'wall within reach, normal po
 assert.equal(wc.wallContact(0, -2, 0.4, 0.35, 2), null, 'too far: no contact');
 assert.equal(wc.wallContact(0, -0.6, 0.4, 0.35, 10), null, 'above the wall top: no contact');
 console.log('wall tests passed');
+
+// Slabs: boxes with a bottom can be walked under; ceilings stop jumps; grid queries match a full scan.
+{
+  const k = new Collision();
+  k.add({ minX: -5, maxX: 5, minZ: -5, maxZ: 5, bottom: 4, top: 5 });
+  assert.equal(k.resolveCircle({ x: 5.2, z: 0 }, 0.5, 0, 1.9), null, 'slab starts above head: walk under it');
+  assert.ok(k.resolveCircle({ x: 5.2, z: 0 }, 0.5, 0, 6), 'taller mover is blocked by the same slab');
+  assert.equal(k.groundHeight(0, 0, 0.4, 0), 0, 'cannot step onto a slab from below');
+  assert.equal(k.groundHeight(0, 0, 0.4, 5), 5, 'slab top is walkable from above');
+  assert.equal(k.ceilingHeight(0, 0, 0.4, 0, 1.9), 4, 'underside is the ceiling');
+  assert.equal(k.ceilingHeight(0, 0, 0.4, 3, 1.9), Infinity, 'head already inside the slab span: wall logic, not ceiling');
+  assert.equal(k.ceilingHeight(9, 0, 0.4, 0, 1.9), Infinity, 'open sky outside the slab');
+  assert.equal(k.sweepBlocker(-9, 0, 1, 0, 10, 0.5, 0, 1.9), null, 'sweep passes under slab');
+  assert.equal(k.wallContact(5.6, 0, 0.4, 0.35, 0, 1.9), null, 'overhead slab is no wall to jump off');
+}
+{
+  const k = new Collision({ step: 0.5, floorY: -3 });
+  k.add({ minX: 0, maxX: 2, minZ: 0, maxZ: 2, top: -2.6 });
+  assert.equal(k.resolveCircle({ x: 0.1, z: 0.1 }, 0.4, -3), null, 'rise below step is walkable');
+  assert.equal(k.groundHeight(5, 5, 0.4, 0), -3, 'floorY replaces the default floor');
+  const far = new Collision(); const all = [];
+  for (let i = 0; i < 400; i++) all.push(far.add({ minX: i * 7, maxX: i * 7 + 3, minZ: (i * 13) % 90, maxZ: (i * 13) % 90 + 20, top: 1 + (i % 5) }));
+  for (let i = 0; i < 400; i += 17) {
+    const p = { x: i * 7 + 1.5, z: ((i * 13) % 90) + 10 };
+    assert.equal(far.groundHeight(p.x, p.z, 0.4, 100), all[i].top, 'grid finds the box under the point');
+  }
+  far.remove(all[0]);
+  assert.equal(far.groundHeight(1.5, 10, 0.4, 100), 0, 'removed box leaves the grid');
+}
+console.log('slab tests passed');

@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { STR } from './content/strings.js';
-import { NextbotRegistry, PropRegistry } from './core/registries.js';
+import { NextbotRegistry, PropRegistry, MapRegistry } from './core/registries.js';
 import { Assets } from './core/Assets.js';
 import { Input } from './core/Input.js';
 import { World } from './world/World.js';
+import { Environment } from './world/Environment.js';
+import { loadMapData, buildMap } from './world/MapLoader.js';
 import { Player } from './entities/Player.js';
 import { Nextbot } from './entities/Nextbot.js';
 import { Prop } from './entities/Prop.js';
@@ -34,6 +36,7 @@ export class Game {
   async boot() {
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    Assets.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
     this.camera = new THREE.PerspectiveCamera(CONFIG.player.fov, 1, 0.1, 600);
     this._resize();
     window.addEventListener('resize', () => this._resize());
@@ -41,17 +44,28 @@ export class Game {
     this.screens = new ScreenManager(this.uiRoot);
     this.screens.setBackdrop('menu');
     const bar = el('div', { class: 'loading__fill' });
-    const loading = el('div', { class: 'loading' }, STR.loading, el('div', { class: 'loading__bar' }, bar));
+    const stage = el('div', { class: 'loading__stage' });
+    const loading = el('div', { class: 'loading' }, STR.loading, el('div', { class: 'loading__bar' }, bar), stage);
     this.screens.register('loading', loading);
     this.screens.show('loading');
+    // One bar across all stages: each stage owns a slice [from, to] of it.
+    const progress = (label, from, to) => {
+      stage.textContent = label;
+      return p => { bar.style.width = `${Math.round((from + (to - from) * p) * 100)}%`; };
+    };
+    const S = CONFIG.loading;
 
-    const urls = [...NextbotRegistry.all().map(d => d.texture)];
-    await Assets.preload(urls, p => { bar.style.width = `${Math.round(p * 100)}%`; });
+    const onAssets = progress(STR.loadingStage.assets, 0, S.assets);
+    onAssets(0);
+    await Assets.preload(NextbotRegistry.all().map(d => d.texture), onAssets);
+    const mapData = await loadMapData(MapRegistry.get(CONFIG.world.map), progress(STR.loadingStage.map, S.assets, S.map));
 
-    this.world = new World();
+    this.world = new World(buildMap(mapData));
+    this.env = new Environment(this.renderer, this.world.scene, this.world.bounds);
+    await this._warmUp(progress(STR.loadingStage.shaders, S.map, 1));
     this.input = new Input();
     this.input.attach();
-    this.player = new Player(this.camera);
+    this.player = new Player(this.camera, this.world.spawn);
     this.hud = new Hud();
     this.spawnMenu = new SpawnMenu({
       onSpawn: (tab, item) => tab.spawn(item.id, this.aimPoint(), this),
@@ -78,6 +92,32 @@ export class Game {
 
     this._bindInput();
     this.renderer.setAnimationLoop(t => this._frame(t));
+  }
+
+  /**
+   * Pays every first-use GPU cost behind the loading screen: texture upload, shader compilation (map, prop and
+   * nextbot materials) and the first shadow map. Nothing should hitch when the player presses Play.
+   */
+  async _warmUp(onProgress) {
+    const frame = () => new Promise(r => requestAnimationFrame(r));
+    const tex = this.world.textures;
+    for (let i = 0; i < tex.length; i++) {
+      this.renderer.initTexture(tex[i]);
+      if (i % CONFIG.loading.uploadBatch === CONFIG.loading.uploadBatch - 1) { onProgress((i + 1) / tex.length * 0.6); await frame(); }
+    }
+    const bot = this.world.add(new Nextbot(NextbotRegistry.all()[0], Assets.get(NextbotRegistry.all()[0].texture), 0, 0, { x: 0, z: 1 }));
+    const prop = this.world.add(new Prop(PropRegistry.all()[0], 0, 0));
+    onProgress(0.7);
+    await this.renderer.compileAsync(this.world.scene, this.camera);
+    onProgress(0.9);
+    this.camera.position.set(this.world.spawn.x, this.world.spawn.y + CONFIG.player.eyeHeight, this.world.spawn.z);
+    this.renderer.shadowMap.needsUpdate = true;
+    this.renderer.render(this.world.scene, this.camera);
+    this.world.remove(bot);
+    this.world.remove(prop);
+    this.world.shadowDirty = true;
+    onProgress(1);
+    await frame();
   }
 
   /* ---------------- state ---------------- */
@@ -195,28 +235,26 @@ export class Game {
   }
 
   /* ---------------- tools ---------------- */
-  /** Where the crosshair hits the world. Falls back to 10 units ahead on the ground. */
+  /** Where the crosshair hits the world, dropped onto the surface below it. Falls back to 10 units ahead. */
   aimPoint() {
     this.raycaster.setFromCamera({ x: 0, y: 0 }, this.camera);
     const hit = this.raycaster.intersectObjects(this.world.aimTargets(), false)[0];
-    const lim = CONFIG.world.halfSize - 3;
     const p = hit ? hit.point.clone() : this.raycaster.ray.at(10, new THREE.Vector3());
-    p.x = Math.max(-lim, Math.min(lim, p.x));
-    p.z = Math.max(-lim, Math.min(lim, p.z));
-    p.y = 0;
+    this.world.clamp(p, CONFIG.world.aimMargin);
+    p.y = this.world.collision.groundHeight(p.x, p.z, CONFIG.player.radius, p.y);
     return p;
   }
 
   spawnNextbot(id, point) {
     if (this.world.count('nextbot') >= CONFIG.limits.maxNextbots) { toast(STR.spawn.nextbotLimit); return; }
     const def = NextbotRegistry.get(id);
-    this.world.add(new Nextbot(def, Assets.get(def.texture), point.x, point.z, this.player.pos));
+    this.world.add(new Nextbot(def, Assets.get(def.texture), point.x, point.z, this.player.pos, point.y));
     this.spawnMenu.updateCounts();
   }
 
   spawnProp(id, point) {
     if (this.world.count('prop') >= CONFIG.limits.maxProps) { toast(STR.spawn.propLimit); return; }
-    this.world.add(new Prop(PropRegistry.get(id), point.x, point.z));
+    this.world.add(new Prop(PropRegistry.get(id), point.x, point.z, point.y));
     this.spawnMenu.updateCounts();
   }
 
@@ -244,6 +282,7 @@ export class Game {
     this.lastT = t;
     if (this.state !== 'playing') return;
     if (!this.paused) this._update(dt);
+    if (this.world.shadowDirty) { this.renderer.shadowMap.needsUpdate = true; this.world.shadowDirty = false; }
     this.renderer.render(this.world.scene, this.camera);
   }
 
@@ -257,7 +296,7 @@ export class Game {
       if (this.respawnTimer <= 0) {
         this.player.respawn();
         this.player.invulnerable = cfg.invulnerable;
-        this.world.pushNextbotsFrom(CONFIG.player.spawn.x, CONFIG.player.spawn.z, cfg.pushRadius);
+        this.world.pushNextbotsFrom(this.world.spawn.x, this.world.spawn.z, cfg.pushRadius);
         this.hud.hideCaught();
       }
     } else {

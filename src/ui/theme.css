@@ -105,3 +105,4 @@ kbd { display: inline-block; padding: 2px 8px; border: 1px solid var(--c-line); 
 .loading { color: var(--c-text); letter-spacing: .2em; text-transform: uppercase; }
 .loading__bar { width: min(420px, 70vw); height: 6px; background: rgba(255,255,255,.15); margin-top: var(--s3); }
 .loading__fill { height: 100%; width: 0; background: var(--c-accent); }
+.loading__stage { margin-top: var(--s2); font-size: 14px; color: var(--c-dim); }
