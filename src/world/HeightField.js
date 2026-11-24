@@ -51,3 +51,30 @@ export function rasterizeHeights(chunks, bounds, res) {
   }
   return { data, width, height, minX, minZ, cell, empty: HEIGHT_EMPTY };
 }
+
+/**
+ * Conservative max filter: every cell takes the highest value within `radius` cells (separable, square window).
+ * Roof edges grow outwards by `radius` cells, which closes pinholes between triangles and stops bilinear sampling from
+ * letting sky fill leak under the rim of a roof. Returns a new Float32Array; `field.data` is untouched.
+ */
+export function dilateHeights(field, radius) {
+  const { data, width, height } = field;
+  if (radius <= 0) return data.slice();
+  const tmp = new Float32Array(data.length);
+  for (let j = 0; j < height; j++) {
+    for (let i = 0; i < width; i++) {
+      let m = -Infinity;
+      for (let k = Math.max(0, i - radius); k <= Math.min(width - 1, i + radius); k++) m = Math.max(m, data[j * width + k]);
+      tmp[j * width + i] = m;
+    }
+  }
+  const out = new Float32Array(data.length);
+  for (let j = 0; j < height; j++) {
+    for (let i = 0; i < width; i++) {
+      let m = -Infinity;
+      for (let k = Math.max(0, j - radius); k <= Math.min(height - 1, j + radius); k++) m = Math.max(m, tmp[k * width + i]);
+      out[j * width + i] = m;
+    }
+  }
+  return out;
+}

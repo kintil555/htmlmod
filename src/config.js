@@ -89,9 +89,9 @@ export const CONFIG = {
      * Ambient visibility (world/SkyAmbient.js). The sky fill and environment light are scaled by how much sky a surface sees,
      * so spots under roofs, balconies and indoors get `minimum` of the ambient (bounce light) instead of the open-sky amount.
      * Distances are in eye heights: `reach` probe radius, `lift` push out along the normal, `soft` height blend, `bias` slack.
-     * `taps` probes per pixel, `resolution` height-field cells along the map's longer side.
+     * `taps` probes per pixel, `resolution` height-field cells along the map's longer side, `dilate` cells roofs are grown by (stops leaks at their edges).
      */
-    skyAmbient: { resolution: 2048, taps: 20, reach: 2.5, lift: 0.25, soft: 0.6, bias: 0.1, minimum: 0.3 },
+    skyAmbient: { resolution: 2048, dilate: 2, taps: 20, reach: 2.5, lift: 0.25, soft: 0.6, bias: 0.1, minimum: 0.3 },
     /**
      * Sun shadows are cascaded shadow maps (three/addons/csm): `cascades` maps of `mapSize`, splitting the view out to `maxFar`
      * world units (nearest cascade is the sharpest). `lightMargin` must exceed the map's height. Bias is a fraction of the

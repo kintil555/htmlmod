@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { texture, uniform, positionWorld, normalWorld, vec3, float, mix, smoothstep, min, dot, cos, sin, interleavedGradientNoise, screenCoordinate, Fn } from 'three/tsl';
 import { CONFIG } from '../config.js';
-import { rasterizeHeights, HEIGHT_EMPTY } from './HeightField.js';
+import { rasterizeHeights, dilateHeights, HEIGHT_EMPTY } from './HeightField.js';
 
 const GOLDEN_ANGLE = 2.399963229728653;
 
@@ -54,8 +54,11 @@ export const SkyAmbient = {
   /** Rasterizes the map's triangles (collectTriangles() output) into the height field. Call before the first render. */
   bake(chunks, bounds) {
     const field = rasterizeHeights(chunks, bounds, K.resolution);
-    const half = new Uint16Array(field.data.length);
-    for (let i = 0; i < half.length; i++) half[i] = THREE.DataUtils.toHalfFloat(field.data[i]);
+    // Grow roof edges, then give uncovered cells the map's lowest height so bilinear sampling blends towards open ground
+    // instead of towards a huge negative number (which read as open sky right up to a roof's rim).
+    const solid = dilateHeights(field, K.dilate);
+    const half = new Uint16Array(solid.length);
+    for (let i = 0; i < half.length; i++) half[i] = THREE.DataUtils.toHalfFloat(solid[i] <= HEIGHT_EMPTY ? bounds.minY : solid[i]);
     heightTex.image = { data: half, width: field.width, height: field.height };
     heightTex.needsUpdate = true;
     origin.value.set(field.minX, field.minZ);

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { rasterizeHeights, HEIGHT_EMPTY } from '../src/world/HeightField.js';
+import { rasterizeHeights, dilateHeights, HEIGHT_EMPTY } from '../src/world/HeightField.js';
 
 // Two quads: a floor at y=0 over [0,10]^2 and a roof at y=5 over [0,4]x[0,10] (two triangles each).
 const quad = (x0, x1, z0, z1, y) => ({
@@ -24,5 +24,14 @@ const slope = { world: new Float32Array([0, 0, 0, 10, 10, 0, 0, 0, 10]), index: 
 const s = rasterizeHeights([slope], bounds, 100);
 const h = (x, z) => s.data[Math.floor((z - s.minZ) / s.cell) * s.width + Math.floor((x - s.minX) / s.cell)];
 assert.ok(Math.abs(h(5, 1) - 5) < 0.2, 'ramp height at x=5 is about 5, got ' + h(5, 1));
+
+// Dilation grows a roof outwards by `radius` cells and never lowers anything.
+const spike = { data: new Float32Array(25).fill(HEIGHT_EMPTY), width: 5, height: 5 };
+spike.data[12] = 7;
+const grown = dilateHeights(spike, 1);
+assert.equal(grown[6], 7, 'diagonal neighbour takes the roof height');
+assert.equal(grown[0], HEIGHT_EMPTY, 'cells two away stay empty');
+assert.equal(grown[12], 7, 'centre keeps its height');
+assert.equal(dilateHeights(spike, 0)[12], 7, 'radius 0 copies');
 
 console.log('sky tests passed');
