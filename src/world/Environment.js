@@ -12,7 +12,7 @@ const TONE = {
 /**
  * Daylight: analytic sky dome, sun with one static shadow map fitted to the map, image-based ambient light
  * baked from the sky, hemisphere fill, fog and tone mapping. All numbers come from CONFIG.lighting.
- * Shadows are re-rendered only when `markShadowsDirty()` is called (Game does that when props change).
+ * The sun shadow map is redrawn every frame around the player (`followShadow`), so moving props and bots cast shadows too.
  * Needs an initialised WebGPURenderer (`await renderer.init()`).
  */
 export class Environment {
@@ -60,39 +60,45 @@ export class Environment {
   _makeSun(scene, bounds, sunDir) {
     const L = CONFIG.lighting;
     const sun = new THREE.DirectionalLight(L.sun.color, L.sun.intensity);
-    const center = new THREE.Vector3((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2, (bounds.minZ + bounds.maxZ) / 2);
-    const radius = Math.hypot(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY, bounds.maxZ - bounds.minZ) / 2;
-    sun.position.copy(center).addScaledVector(sunDir, radius * 2);
-    sun.target.position.copy(center);
     scene.add(sun, sun.target);
-    sun.updateMatrixWorld(true);
-    sun.target.updateMatrixWorld(true);
 
-    // Fit the orthographic shadow frustum around the whole map, in light space.
-    // Orient the shadow camera exactly as the renderer will (at the sun, looking at the target) before measuring
-    // the map in its space; without this the frustum is fitted to an identity camera and the shadow map is empty.
-    sun.shadow.updateMatrices(sun);
+    // The shadow map is a small window (2 * extent wide) that follows the player: far sharper than one map fitted to
+    // the whole level. Depth range covers the tallest geometry between the sun and the window.
+    const S = L.shadow;
+    this._shadowDist = Math.hypot(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY, bounds.maxZ - bounds.minZ);
+    const half = Math.max(S.extent, bounds.maxY - bounds.minY);
     const cam = sun.shadow.camera;
-    const box = new THREE.Box3();
-    for (const x of [bounds.minX, bounds.maxX]) for (const y of [bounds.minY, bounds.maxY]) for (const z of [bounds.minZ, bounds.maxZ]) {
-      box.expandByPoint(new THREE.Vector3(x, y, z).applyMatrix4(cam.matrixWorldInverse));
-    }
-    const pad = CONFIG.world.shadowPad;
-    cam.left = box.min.x - pad; cam.right = box.max.x + pad;
-    cam.bottom = box.min.y - pad; cam.top = box.max.y + pad;
-    cam.near = Math.max(0.1, -box.max.z - pad); cam.far = -box.min.z + pad;
+    cam.left = -S.extent; cam.right = S.extent; cam.bottom = -S.extent; cam.top = S.extent;
+    cam.near = this._shadowDist - half; cam.far = this._shadowDist + half;
     cam.updateProjectionMatrix();
 
     sun.castShadow = true;
-    sun.shadow.mapSize.set(L.shadow.mapSize, L.shadow.mapSize);
-    sun.shadow.bias = L.shadow.bias;
-    sun.shadow.normalBias = L.shadow.normalBias;
-    sun.shadow.radius = L.shadow.radius;
-    sun.shadow.autoUpdate = false;
-    sun.shadow.needsUpdate = true;
+    sun.shadow.mapSize.set(S.mapSize, S.mapSize);
+    sun.shadow.bias = S.bias;
+    sun.shadow.normalBias = S.normalBias;
+    sun.shadow.radius = S.radius;
+    this._sunRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), sunDir).normalize();
+    this._sunUp = new THREE.Vector3().crossVectors(sunDir, this._sunRight);
+    this._center = new THREE.Vector3();
+    this.sun = sun;
+    this.followShadow(new THREE.Vector3((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2, (bounds.minZ + bounds.maxZ) / 2));
     return sun;
   }
 
-  /** The static sun shadow map is redrawn on the next frame (props added/removed). */
-  markShadowsDirty() { this.sun.shadow.needsUpdate = true; }
+  /**
+   * Centers the shadow window on `point`. The centre is snapped to whole shadow texels in light space so shadow
+   * edges do not crawl while the player moves. Call every frame before rendering.
+   */
+  followShadow(point) {
+    const S = CONFIG.lighting.shadow;
+    const texel = 2 * S.extent / S.mapSize;
+    const x = Math.round(point.dot(this._sunRight) / texel) * texel;
+    const y = Math.round(point.dot(this._sunUp) / texel) * texel;
+    this._center.set(0, 0, 0)
+      .addScaledVector(this._sunRight, x)
+      .addScaledVector(this._sunUp, y)
+      .addScaledVector(this.sunDir, point.dot(this.sunDir));
+    this.sun.target.position.copy(this._center);
+    this.sun.position.copy(this._center).addScaledVector(this.sunDir, this._shadowDist);
+  }
 }

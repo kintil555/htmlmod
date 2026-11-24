@@ -85,7 +85,8 @@ export const CONFIG = {
     sky: { turbidity: 3, rayleigh: 1.2, mieCoefficient: 0.004, mieDirectionalG: 0.82, scale: 450000, clouds: { coverage: 0.5, density: 0.55, elevation: 0.5 } },
     environmentIntensity: 0.35,
     hemisphere: { sky: 0xa9c8ff, ground: 0x7d705f, intensity: 0.12 },
-    shadow: { mapSize: 4096, bias: -0.0003, normalBias: 0.05, radius: 2 },
+    /** Sun shadow window follows the player: `extent` = half its width in world units (smaller = sharper, but shorter range). */
+    shadow: { mapSize: 4096, extent: 40, bias: -0.0001, normalBias: 0.03, radius: 3 },
     fog: { color: 0xc3d6ea, density: 0.0016 },
     /** Fallback surface for map materials that match nothing in `surfaces`. */
     material: { roughness: 0.9, metalness: 0 },

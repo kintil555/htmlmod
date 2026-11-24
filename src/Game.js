@@ -28,7 +28,6 @@ export class Game {
     this._menuClosedAt = -Infinity;
     this.stats = { caught: 0, survived: 0 };
     this.respawnTimer = 0;
-    this.shadowWarmFrames = 5;
     this.hudTimer = 0;
     this.lastT = 0;
     this._qDownAt = 0;
@@ -121,13 +120,12 @@ export class Game {
     await this.renderer.compileAsync(this.world.scene, this.camera);
     onProgress(0.9);
     this.camera.position.set(this.world.spawn.x, this.world.spawn.y + CONFIG.player.eyeHeight, this.world.spawn.z);
-    this.env.markShadowsDirty();
+    this.env.followShadow(this.camera.position);
     this.fx.render();
     await frame();
     this.fx.render();
     this.world.remove(bot);
     this.world.remove(prop);
-    this.world.shadowDirty = true;
     onProgress(1);
     await frame();
   }
@@ -294,9 +292,7 @@ export class Game {
     this.lastT = t;
     if (this.state !== 'playing') return;
     if (!this.paused) this._update(dt);
-    // Redraw the static shadow map for the first frames too, so a map drawn before everything was ready cannot stay empty.
-    if (this.shadowWarmFrames > 0) { this.shadowWarmFrames--; this.world.shadowDirty = true; }
-    if (this.world.shadowDirty) { this.env.markShadowsDirty(); this.world.shadowDirty = false; }
+    this.env.followShadow(this.camera.position);
     this.fx.render();
   }
 

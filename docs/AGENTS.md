@@ -31,7 +31,7 @@ One game, one style. Everything is a library. **Extend, never duplicate.**
 
 **Mirrors:** any flat pane whose material name starts with `MIRROR` in `tools/bake_map.py` (default: `glassreflectiveglass`, `mirror`) is baked with `mirror: true` and rebuilt by `world/Mirror.js` as real planar TSL `reflector()` nodes (one per plane, plus a back-side twin). No per-pane code. Tunables: `CONFIG.lighting.mirror`.
 
-**Lighting/sky:** all numbers live in `CONFIG.lighting`; code is `world/Environment.js` (SkyMesh sky, sun, soft static shadow map). Shadows re-render only when a prop is added or removed (`entity.castsShadow = true` -> `env.markShadowsDirty()`).
+**Lighting/sky:** all numbers live in `CONFIG.lighting`; code is `world/Environment.js` (SkyMesh sky, sun, soft shadow window). The sun's shadow map is a `shadow.extent`-wide window that follows the player and is redrawn every frame (`env.followShadow`, texel-snapped), so props and bots cast shadows; geometry beyond the window casts none.
 
 **Surfaces / Fresnel:** map materials get roughness, metalness, Fresnel reflectance (`specular`) and sky-reflection strength from the first `CONFIG.lighting.surfaces` entry whose `match` hits the baked material name (`surfaceFor()` in `world/MapLoader.js`). Water and glass use a view-angle Fresnel (`world/Fresnel.js`): water turns opaque and reflective at grazing angles, glass blends from dark to fully mirrored. Add a class by adding one entry.
 

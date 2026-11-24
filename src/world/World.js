@@ -13,7 +13,6 @@ export class World {
     this.bounds = map.bounds;
     this.spawn = map.spawn;
     this.textures = map.textures;
-    this.shadowDirty = false;
     this.entities = new Set();
     this.decor = map.group.children.filter(m => !m.userData.noAim);
     this.scene.add(map.group);
@@ -41,14 +40,12 @@ export class World {
     this.scene.add(entity.object3d);
     entity.world = this;
     entity.onAdded();
-    if (entity.castsShadow) this.shadowDirty = true;
     return entity;
   }
   remove(entity) {
     if (!this.entities.delete(entity)) return;
     this.scene.remove(entity.object3d);
     entity.onRemoved();
-    if (entity.castsShadow) this.shadowDirty = true;
   }
   ofType(type) { return [...this.entities].filter(e => e.type === type); }
   count(type) { let n = 0; for (const e of this.entities) if (e.type === type) n++; return n; }
