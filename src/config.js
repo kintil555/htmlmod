@@ -91,7 +91,7 @@ export const CONFIG = {
      * Distances are in eye heights: `reach` probe radius, `lift` push out along the normal, `soft` height blend, `bias` slack.
      * `taps` probes per pixel, `resolution` height-field cells along the map's longer side.
      */
-    skyAmbient: { resolution: 2048, taps: 12, reach: 2.5, lift: 0.25, soft: 0.6, bias: 0.1, minimum: 0.3 },
+    skyAmbient: { resolution: 2048, taps: 20, reach: 2.5, lift: 0.25, soft: 0.6, bias: 0.1, minimum: 0.3 },
     /**
      * Sun shadows are cascaded shadow maps (three/addons/csm): `cascades` maps of `mapSize`, splitting the view out to `maxFar`
      * world units (nearest cascade is the sharpest). `lightMargin` must exceed the map's height. Bias is a fraction of the
