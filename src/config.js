@@ -145,7 +145,7 @@ export const CONFIG = {
    * bank height above the surface), so crests move shoreward: a fast uprush (rise = share of the cycle spent rising) that runs up the bank (reach = bank height where it dies)
    * and a slow backwash that draws the waterline below the still level (draw = trough depth as a share of height). height: crest above still level; period: seconds per wave;
    * shallowStart/shallowEnd: depth where the swell fades into open water; wobble: [kx, kz, cycles] sines that vary the phase along the shore; hug: how far the mesh sits above the
-   * ground where there is no water (it follows the bank, no sheet floats over land). Water thickness = mesh height - baked ground, so the waterline is exactly where the mesh meets the ground.
+   * ground where there is no water and the bank is gentler than hugSlope (rise/run; walls and ledges are left alone). Water thickness = mesh height - baked ground, so the waterline is exactly where the mesh meets the ground.
    * splashGain: how much the simulated ripples/splashes lift the surface; shoreFade: depth over which waves grow from nothing at the shore; meshCell: water mesh grid size.
    * sim: speed = ripple travel speed; shoreDamp/deepDamp = per-step energy kept in the shallows / open water; limit = max |height|.
    * waves.choppy: Gerstner sharpening of crests. ripple: wake = push per second per unit of speed, laid along the path as a bow wave (bow = share raised in front) with a trough behind (V wake);
@@ -167,7 +167,7 @@ export const CONFIG = {
       ],
     },
     shore: {
-      height: 0.45, period: 5.5, rise: 0.3, draw: 0.5, phasePerDepth: 0.35, reach: 0.9, shallowStart: 0.8, shallowEnd: 3, hug: 0.006,
+      height: 0.45, period: 5.5, rise: 0.3, draw: 0.5, phasePerDepth: 0.35, reach: 0.9, shallowStart: 0.8, shallowEnd: 3, hug: 0.006, hugSlope: 0.45,
       wobble: [[0.37, 0.23, 0.3], [0.19, -0.41, 0.2]],
     },
     sim: { speed: 11, step: 1 / 60, shoreDamp: 0.86, deepDamp: 0.9935, shoreFull: 0.8, edge: 8, limit: 0.6, foamDecay: 0.55, crest: 0.05, crestGain: 4, idle: 0.0003 },

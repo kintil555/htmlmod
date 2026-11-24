@@ -172,7 +172,11 @@ function buildMaterial() {
   const fadeV = ampByDepth(dV);
   const wv = waveField(wp.xz);
   const liftV = wv.h.add(texture(simTex, uvV).level(0).r.mul(W.waves.splashGain)).mul(fadeV).add(swashAt(wp.xz, dV));
-  const hugV = dV.negate().add(SH.hug);
+  // Hug only gentle banks: on steep ground (walls, ledges) the mesh would be dragged up into a slanted sheet, so it stays at the surface (hidden inside the wall).
+  const eV = vec2(W.waves.meshCell * 1.5, 0).mul(invSize);
+  const dAt = o => texture(depthTex, uvV.add(o)).level(0).r;
+  const slopeV = max(dAt(eV).sub(dAt(eV.negate())).abs(), dAt(eV.yx).sub(dAt(eV.yx.negate())).abs()).div(W.waves.meshCell * 3);
+  const hugV = select(slopeV.lessThan(SH.hugSlope), dV.negate().add(SH.hug), float(-100));
   const edgeV = min(min(wp.x.sub(origin.x), hiCorner.x.sub(wp.x)), min(wp.z.sub(origin.y), hiCorner.y.sub(wp.z)));
   const shiftV = smoothstep(W.waves.shoreFade, W.waves.shoreFade * 3, dV).mul(smoothstep(0, W.waves.edgeMargin, edgeV));
   material.positionNode = positionLocal.add(vec3(wv.sx.mul(shiftV), max(liftV, hugV), wv.sz.mul(shiftV)).mul(invScale));
