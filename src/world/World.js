@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { Collision } from './Collision.js';
 import { collectTriangles } from './MapLoader.js';
+import { NavGraph } from './NavGraph.js';
 
 /** Owns the scene, the baked map (render meshes + colliders) and the entity list. */
 export class World {
@@ -18,6 +19,14 @@ export class World {
     this.scene.add(map.group);
     this.collision = new Collision({ step: CONFIG.player.stepHeight, floorY: map.bounds.minY - CONFIG.world.floorDepth });
     for (const { world, index } of collectTriangles(map.group)) this.collision.addTriangles(world, index);
+    this.nav = null;
+  }
+
+  /** Bakes the nextbot navigation graph from the map's collision (any map, automatic). Call once after construction. */
+  async buildNav(onProgress) {
+    const n = CONFIG.nextbot;
+    this.nav = new NavGraph(this.collision, this.bounds, n.nav, { bodyHeight: n.bodyHeight, jumpSpeed: n.jumpSpeed, gravity: n.gravity, clearance: n.clearance, step: n.stepHeight });
+    await this.nav.bake(onProgress);
   }
 
   /** Keeps a circle of radius r inside the map's XZ bounds. */
@@ -65,6 +74,7 @@ export class World {
   }
 
   update(dt, ctx) {
+    if (this.nav && this.count('nextbot')) this.nav.updateFlow(dt, ctx.player.pos.x, ctx.player.pos.y, ctx.player.pos.z);
     for (const e of [...this.entities]) e.update(dt, ctx);
     const bots = this.ofType('nextbot');
     for (let i = 0; i < bots.length; i++) {

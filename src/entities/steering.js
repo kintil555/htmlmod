@@ -68,3 +68,13 @@ export function planObstacle(blocker, feetY, speed, jumpSpeed, gravity, radius, 
   return blocker.dist <= speed * tRise + radius + n.jumpMargin ? 'jump' : 'wait';
 }
 
+
+/**
+ * Highest ledge (above the feet) a jump can still land on: the bot must stay above the ledge for at least
+ * `minWindow` seconds so it has time to travel over the lip. `clearance` is the extra height needed to clear it.
+ */
+export function maxJumpRise(jumpSpeed, gravity, clearance, minWindow) {
+  const half = (minWindow * gravity) / 2;
+  const h = (jumpSpeed * jumpSpeed - half * half) / (2 * gravity);
+  return Math.max(0, h - clearance);
+}

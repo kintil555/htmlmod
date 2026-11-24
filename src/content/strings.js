@@ -2,7 +2,7 @@
 export const STR = {
   menu: { play: 'Play', help: 'Help', settings: 'Settings', resume: 'Resume', quit: 'Main Menu', back: 'Back' },
   loading: 'Loading…',
-  loadingStage: { assets: 'Loading assets', map: 'Loading map', shaders: 'Preparing graphics' },
+  loadingStage: { assets: 'Loading assets', map: 'Loading map', nav: 'Building navigation', shaders: 'Preparing graphics' },
   settings: { title: 'Settings', empty: 'No options yet.' },
   help: {
     title: 'Help',

@@ -61,8 +61,9 @@ export class Game {
     const mapData = await loadMapData(MapRegistry.get(CONFIG.world.map), progress(STR.loadingStage.map, S.assets, S.map));
 
     this.world = new World(buildMap(mapData));
+    await this.world.buildNav(progress(STR.loadingStage.nav, S.map, S.nav));
     this.env = new Environment(this.renderer, this.world.scene, this.world.bounds);
-    await this._warmUp(progress(STR.loadingStage.shaders, S.map, 1));
+    await this._warmUp(progress(STR.loadingStage.shaders, S.nav, 1));
     this.input = new Input();
     this.input.attach();
     this.player = new Player(this.camera, this.world.spawn);

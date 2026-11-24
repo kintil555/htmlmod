@@ -80,10 +80,10 @@ export class Collision {
    * Pushes circle `p` ({x,z}) out of solid boxes. Returns last contact normal {nx,nz} or null.
    * `height` is the mover's body height: boxes that start above feetY + height are overhead and ignored.
    */
-  resolveCircle(p, r, feetY = 0, height = Infinity) {
+  resolveCircle(p, r, feetY = 0, height = Infinity, step = this.step) {
     let hit = null;
     for (const b of this._near(p.x - r, p.x + r, p.z - r, p.z + r)) {
-      if (b.top <= feetY + this.step || b.bottom >= feetY + height) continue;
+      if (b.top <= feetY + step || b.bottom >= feetY + height) continue;
       const cx = Math.max(b.minX, Math.min(p.x, b.maxX));
       const cz = Math.max(b.minZ, Math.min(p.z, b.maxZ));
       const dx = p.x - cx;
@@ -105,23 +105,37 @@ export class Collision {
       } else continue;
       hit = { nx, nz };
     }
-    if (this.tris.count) hit = this.tris.resolve(p, r, feetY, height, this.step) ?? hit;
+    if (this.tris.count) hit = this.tris.resolve(p, r, feetY, height, step) ?? hit;
     return hit;
   }
 
-  /** Highest walkable surface under a circle at height y (`floorY` when there is none). */
-  groundHeight(x, z, r, y) {
+  /** Highest walkable surface under a circle at height y (`floorY` when there is none). `step` overrides the mover's max rise. */
+  groundHeight(x, z, r, y, step = this.step) {
     let g = this.floorY;
     const rr = r * 0.9;
     for (const b of this._near(x - rr, x + rr, z - rr, z + rr)) {
-      if (b.top > y + this.step || b.top <= g) continue;
+      if (b.top > y + step || b.top <= g) continue;
       const cx = Math.max(b.minX, Math.min(x, b.maxX));
       const cz = Math.max(b.minZ, Math.min(z, b.maxZ));
       const dx = x - cx; const dz = z - cz;
       if (dx * dx + dz * dz < rr * rr || (dx === 0 && dz === 0)) g = b.top;
     }
-    if (this.tris.count) g = this.tris.ground(x, z, r, y, this.step, g);
+    if (this.tris.count) g = this.tris.ground(x, z, r, y, step, g);
     return g;
+  }
+
+  /**
+   * Every standable surface height at (x,z), ascending, merged within `merge`. The infinite floor is not listed.
+   * Used to bake the navigation graph (NavGraph.js).
+   */
+  floorsAt(x, z, merge = 0.05) {
+    const hs = [];
+    for (const b of this._near(x, x, z, z)) if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) hs.push(b.top);
+    if (this.tris.count) this.tris.floors(x, z, hs);
+    hs.sort((a, b) => a - b);
+    const out = [];
+    for (const h of hs) if (!out.length || h - out[out.length - 1] > merge) out.push(h);
+    return out;
   }
 
   /** Lowest underside above a mover's head (feetY + height) over a circle; Infinity when the way up is open. */
@@ -142,13 +156,13 @@ export class Collision {
 
   /**
    * Swept circle (radius r) from (x,z) along unit dir (dx,dz) up to `dist`.
-   * Returns {box, dist} for the nearest box taller than feetY + step (and not overhead), or null.
+   * Returns {box, dist} for the nearest box taller than feetY + step (and not overhead), or null. `step` overrides the mover's max rise.
    */
-  sweepBlocker(x, z, dx, dz, dist, r, feetY = 0, height = Infinity) {
+  sweepBlocker(x, z, dx, dz, dist, r, feetY = 0, height = Infinity, step = this.step) {
     let best = null;
     const ex = x + dx * dist; const ez = z + dz * dist;
     for (const b of this._near(Math.min(x, ex) - r, Math.max(x, ex) + r, Math.min(z, ez) - r, Math.max(z, ez) + r)) {
-      if (b.top <= feetY + this.step || b.bottom >= feetY + height) continue;
+      if (b.top <= feetY + step || b.bottom >= feetY + height) continue;
       let t0 = 0; let t1 = dist;
       const axes = [[x, dx, b.minX - r, b.maxX + r], [z, dz, b.minZ - r, b.maxZ + r]];
       let ok = true;
@@ -162,7 +176,7 @@ export class Collision {
       if (ok && (!best || t0 < best.dist)) best = { box: b, dist: t0 };
     }
     if (this.tris.count) {
-      const m = this.tris.blocker(x, z, dx, dz, dist, r, feetY, height, this.step);
+      const m = this.tris.blocker(x, z, dx, dz, dist, r, feetY, height, step);
       if (m && (!best || m.dist < best.dist)) best = { box: { top: m.top }, dist: m.dist };
     }
     return best;

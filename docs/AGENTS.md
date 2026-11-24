@@ -10,7 +10,7 @@ One game, one style. Everything is a library. **Extend, never duplicate.**
 5. No magic numbers for gameplay. Put them in `src/config.js`.
 6. Content is data in registries. Do not edit engine code to add content.
 7. Do not touch unrelated files. Do not leave TODOs or placeholders.
-8. Run `node test/logic.test.mjs` after touching `steering.js`, `Collision.js` or `colliders.js`.
+8. Run `node test/logic.test.mjs` and `node test/nav.test.mjs` after touching `steering.js`, `Collision.js`, `NavGraph.js` or `colliders.js`.
 
 ## Recipes
 **Add a nextbot:** put `assets/nextbots/<id>.png` (transparent PNG), add one line to `src/content/nextbots.js`. It appears in the Q menu automatically.
@@ -26,6 +26,8 @@ One game, one style. Everything is a library. **Extend, never duplicate.**
 **Add a screen:** build it in `ui/screens.js` from `ui.js` components, register it in `Game.boot()`.
 
 **Add a map:** run `python3 tools/bake_map.py <glTF dir> assets/maps/<id>` (needs numpy + Pillow; build-time only), then add one entry to `src/content/maps.js` (`eyeHeight`, `spawn`). Set `CONFIG.world.map` to load it. The map is scaled at load so its player eye height equals `CONFIG.player.eyeHeight`. Keep the author's license file next to the map and credit it in `STR.help`.
+
+**Nextbot navigation:** automatic. `world/NavGraph.js` bakes a multi-level graph from the map's collision at load (walk, jump up, drop down edges; tunnels and roofs included), so a new map needs nothing extra. One shared flow field from the player gives every bot its next waypoint; bots jump ledges up to the jump apex. Tunables: `CONFIG.nextbot.nav`, `stepHeight`, `jumpSpeed`.
 
 **Mirrors:** any flat pane whose material name starts with `MIRROR` in `tools/bake_map.py` (default: `glassreflectiveglass`, `mirror`) is baked with `mirror: true` and rebuilt by `world/Mirror.js` as real planar `Reflector`s (one per plane, plus a back-side twin). No per-pane code. Tunables: `CONFIG.lighting.mirror`.
 

@@ -34,6 +34,38 @@ export const CONFIG = {
     climbReach: 1.5,
     targetAboveGap: 1.0,
     bodyHeight: 1.9,
+    stepHeight: 1,
+    groundSnap: 0.6,
+    stepSmooth: 30,
+    /**
+     * Navigation graph, baked automatically from the map's collision (any map, no hand-placed waypoints).
+     * cell/radius: grid spacing and body radius used to test that a spot is open. headroom: min free height above a floor. edgeMargin: floor must extend this far around a spot, so paths keep clear of ledges.
+     * walkRise: biggest height change walked between neighbour cells (equals nextbot.stepHeight, the bot's own stride). jumpCells/dropCells: how far a jump up / drop down may reach.
+     * minAirWindow: seconds a jump must stay above its ledge. directCost: path cost below which the bot just runs at the target.
+     * progressTime/progressMin/banTime: if a bot on a planned path moves less than progressMin in progressTime seconds, its next graph node is banned for banTime (takes another route). carrotHops/carrotCos: path smoothing (skip ahead along straight walk edges). nodeSearch: ring (cells) searched to snap a position to the graph.
+     */
+    nav: {
+      cell: 1.5,
+      radius: 1.1,
+      headroom: 1,
+      edgeMargin: 1.2,
+      walkRise: 1,
+      jumpCells: 3,
+      dropCells: 3,
+      maxDrop: 40,
+      jumpPenalty: 4,
+      dropPenalty: 1,
+      minAirWindow: 0.25,
+      flowInterval: 0.25,
+      directCost: 4,
+      carrotHops: 3,
+      carrotCos: 0.7,
+      nodeSearch: 2,
+      yieldMs: 12,
+      progressTime: 1,
+      progressMin: 1.5,
+      banTime: 3,
+    },
   },
   /** Which map is loaded (id from content/maps.js). The map is scaled so its player eye height matches player.eyeHeight. */
   world: {
@@ -43,8 +75,8 @@ export const CONFIG = {
     aimMargin: 3,
     voidMargin: 2,
   },
-  /** Loading bar slices (fractions of the whole bar): assets end, map end; shaders take the rest. */
-  loading: { assets: 0.08, map: 0.7, uploadBatch: 4 },
+  /** Loading bar slices (fractions of the whole bar): assets end, map end, navigation bake end; shaders take the rest. */
+  loading: { assets: 0.08, map: 0.6, nav: 0.75, uploadBatch: 4 },
   /** Sun, sky, ambient light, fog, tone mapping. Elevation/azimuth in degrees; azimuth 0 = +Z, 90 = +X. */
   lighting: {
     toneMapping: 'neutral',

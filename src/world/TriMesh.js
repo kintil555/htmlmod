@@ -134,6 +134,16 @@ export class TriMesh {
     return g;
   }
 
+  /** Pushes the height of every floor triangle under the point (x,z) into `out`. */
+  floors(x, z, out) {
+    for (const id of this._near(x, x, z, z)) {
+      if (this.n[id * 3 + 1] < this.walkY) continue;
+      const h = this._heightAt(id, x, z);
+      if (h === h) out.push(h);   // NaN check
+    }
+    return out;
+  }
+
   /** Lowest downward-facing surface at or above the head; Infinity when open. */
   ceiling(x, z, r, head, c) {
     const rr = r * 0.7;
