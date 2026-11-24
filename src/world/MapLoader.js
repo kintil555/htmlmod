@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { Assets } from '../core/Assets.js';
-import { decodeColliders } from './colliders.js';
 
 async function fetchOk(url) {
   const r = await fetch(url);
@@ -47,7 +46,8 @@ function makeMaterial(m, texture) {
 /**
  * Builds scene objects and colliders from loaded map data. The whole map is scaled so the map's own
  * player eye height equals CONFIG.player.eyeHeight (map fits the player). Returns:
- * { group, scale, textures, boxes, bounds, spawn, credit } in game units.
+ * { group, scale, textures, bounds, spawn, credit } in game units. Collision is derived from the meshes
+ * themselves (see collectTriangles); each material's `collide` flag (set by the baker) opts it in or out.
  */
 export function buildMap({ def, meta, buffer }) {
   const scale = CONFIG.player.eyeHeight / def.eyeHeight;
@@ -75,6 +75,7 @@ export function buildMap({ def, meta, buffer }) {
     mesh.castShadow = !m.water && !m.decal;
     mesh.receiveShadow = !m.water;
     mesh.userData.noAim = m.water;
+    mesh.userData.collide = m.collide;
     mesh.matrixAutoUpdate = false;
     group.add(mesh);
   }
@@ -85,9 +86,26 @@ export function buildMap({ def, meta, buffer }) {
   const b = meta.bounds;
   return {
     group, scale, textures: [...textures],
-    boxes: decodeColliders(meta.collision, scale),
     bounds: { minX: b.min[0] * scale, maxX: b.max[0] * scale, minY: b.min[1] * scale, maxY: b.max[1] * scale, minZ: b.min[2] * scale, maxZ: b.max[2] * scale },
     spawn: { x: def.spawn.x * scale, y: def.spawn.y * scale, z: def.spawn.z * scale, yaw: def.spawn.yaw },
     credit: meta.credit,
   };
+}
+
+/**
+ * World-space triangles of every collidable mesh under `root` (userData.collide !== false).
+ * This is the automatic hitbox: any model added to the scene can be made solid with Collision.addTriangles.
+ */
+export function collectTriangles(root) {
+  root.updateMatrixWorld(true);
+  const chunks = [];
+  const v = new THREE.Vector3();
+  root.traverse(o => {
+    if (!o.isMesh || o.userData.collide === false) return;
+    const pos = o.geometry.getAttribute('position'); const index = o.geometry.index;
+    const world = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld); world.set([v.x, v.y, v.z], i * 3); }
+    chunks.push({ world, index: index ? index.array : null });
+  });
+  return chunks;
 }

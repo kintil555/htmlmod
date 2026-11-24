@@ -137,3 +137,35 @@ console.log('wall tests passed');
   assert.equal(far.groundHeight(1.5, 10, 0.4, 100), 0, 'removed box leaves the grid');
 }
 console.log('slab tests passed');
+
+// Automatic mesh collision (TriMesh via Collision.addTriangles): floor, ramp, wall, ceiling from raw triangles.
+{
+  const quad = (a, b, c, d) => [...a, ...b, ...c, ...a, ...c, ...d];
+  const tris = [
+    ...quad([-20, 0, -20], [-20, 0, 20], [20, 0, 20], [20, 0, -20]),      // floor y=0 (faces up)
+    ...quad([5, 0, -5], [5, 4, -5], [5, 4, 5], [5, 0, 5]),                // wall at x=5, 4 high
+    ...quad([-10, 3, -3], [-4, 3, -3], [-4, 3, 3], [-10, 3, 3]),          // slab y=3 (facing down from below)
+  ];
+  const k = new Collision({ step: 0.48, floorY: -50 });
+  k.addTriangles(new Float32Array(tris));
+  assert.ok(Math.abs(k.groundHeight(0, 0, 0.4, 0.2)) < 1e-6, 'floor triangles are ground');
+  const p = { x: 4.8, z: 0 };
+  const h = k.resolveCircle(p, 0.4, 0, 1.9);
+  assert.ok(h && p.x <= 4.6 + 1e-6, 'wall triangles push the mover out, x=' + p.x);
+  const q = { x: 0, z: 0 };
+  assert.equal(k.resolveCircle(q, 0.4, 0, 1.9), null, 'standing on a floor triangle: no push');
+  assert.equal(k.sweepBlocker(0, 0, 1, 0, 10, 0.4, 0, 1.9).box.top, 4, 'sweep reports the wall');
+  assert.equal(k.sweepBlocker(0, 0, 0, 1, 10, 0.4, 0, 1.9), null, 'sweep along open floor is clear');
+  assert.ok(k.wallContact(4.5, 0, 0.4, 0.35, 0, 1.9).nx < -0.9, 'wall contact normal points away');
+  // ramp: rises 0.3 per 1 unit (walkable) vs a 1.0 step (blocked)
+  const ramp = new Collision({ step: 0.48, floorY: -50 });
+  ramp.addTriangles(new Float32Array(quad([0, 0, -2], [0, 0, 2], [10, 3, 2], [10, 3, -2])));
+  assert.ok(Math.abs(ramp.groundHeight(5, 0, 0.4, 1.5) - 1.5) < 0.15, 'ramp height follows the surface');
+  const ledge = new Collision({ step: 0.48, floorY: -50 });
+  ledge.addTriangles(new Float32Array([...quad([-9, 0, -9], [-9, 0, 9], [9, 0, 9], [9, 0, -9]), ...quad([2, 1, -9], [2, 1, 9], [9, 1, 9], [9, 1, -9]), ...quad([2, 0, -9], [2, 1, -9], [2, 1, 9], [2, 0, 9])]));
+  const lp = { x: 1.8, z: 0 };
+  assert.ok(ledge.resolveCircle(lp, 0.4, 0, 1.9) && lp.x <= 1.6 + 1e-6, 'a 1-high ledge blocks walking');
+  assert.equal(ledge.groundHeight(1.8, 0, 0.4, 0), 0, 'cannot step up a 1-high ledge');
+  assert.equal(k.ceilingHeight(-7, 0, 0.4, 0, 1.9), 3, 'underside triangle is a ceiling');
+}
+console.log('trimesh tests passed');

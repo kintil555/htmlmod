@@ -4,9 +4,11 @@
  *
  * A box is {minX,maxX,minZ,maxZ,top,bottom?}. `bottom` defaults to -Infinity (solid down to the floor); a finite
  * bottom makes a slab or overhang that movers can pass under (see the `height` argument below).
- * Boxes whose top is within `step` of the mover's feet are walkable. A spatial grid keeps queries cheap for
- * maps with tens of thousands of boxes.
+ * Boxes whose top is within `step` of the mover's feet are walkable. A spatial grid keeps queries cheap.
+ * Arbitrary models collide automatically through `addTriangles` (see TriMesh.js): no boxes needed.
  */
+import { TriMesh } from './TriMesh.js';
+
 export const STEP_HEIGHT = 0.35;
 const GRID_CELL = 8;
 
@@ -19,7 +21,11 @@ export class Collision {
     this._grid = new Map();
     this._stamp = 0;
     this._hits = [];
+    this.tris = new TriMesh();
   }
+
+  /** Makes a triangle soup (world-space xyz Float32Array, optional index list) solid. */
+  addTriangles(positions, indices = null) { return this.tris.add(positions, indices); }
 
   add(box) {
     if (box.bottom === undefined) box.bottom = -Infinity;
@@ -99,6 +105,7 @@ export class Collision {
       } else continue;
       hit = { nx, nz };
     }
+    if (this.tris.count) hit = this.tris.resolve(p, r, feetY, height, this.step) ?? hit;
     return hit;
   }
 
@@ -113,6 +120,7 @@ export class Collision {
       const dx = x - cx; const dz = z - cz;
       if (dx * dx + dz * dz < rr * rr || (dx === 0 && dz === 0)) g = b.top;
     }
+    if (this.tris.count) g = this.tris.ground(x, z, r, y, this.step, g);
     return g;
   }
 
@@ -128,6 +136,7 @@ export class Collision {
       const dx = x - cx; const dz = z - cz;
       if (dx * dx + dz * dz < rr * rr || (dx === 0 && dz === 0)) c = b.bottom;
     }
+    if (this.tris.count) c = this.tris.ceiling(x, z, r, head, c);
     return c;
   }
 
@@ -152,6 +161,10 @@ export class Collision {
       }
       if (ok && (!best || t0 < best.dist)) best = { box: b, dist: t0 };
     }
+    if (this.tris.count) {
+      const m = this.tris.blocker(x, z, dx, dz, dist, r, feetY, height, this.step);
+      if (m && (!best || m.dist < best.dist)) best = { box: { top: m.top }, dist: m.dist };
+    }
     return best;
   }
 
@@ -172,6 +185,7 @@ export class Collision {
       if (d < 1e-6) continue;
       bestD = d; best = { nx: dx / d, nz: dz / d };
     }
+    if (this.tris.count) best = this.tris.wall(x, z, r, reach, feetY, height, this.step) ?? best;
     return best;
   }
 }

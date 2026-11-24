@@ -290,6 +290,7 @@ export class Game {
     const cfg = CONFIG.catchState;
     this.player.update(dt, this.input, this.world);
     this.world.update(dt, { player: this.player, camera: this.camera });
+    this._voidCheck();
 
     if (this.player.frozen) {
       this.respawnTimer -= dt;
@@ -310,6 +311,13 @@ export class Game {
 
     this.hudTimer -= dt;
     if (this.hudTimer <= 0) { this.hudTimer = 0.2; this._refreshHud(); }
+  }
+
+  /** Anything that leaves the map and drops into the void is put back (player) or removed (nextbots). */
+  _voidCheck() {
+    const limit = this.world.bounds.minY - CONFIG.world.voidMargin;
+    if (this.player.pos.y < limit && !this.player.frozen) { this.player.respawn(); this.player.invulnerable = CONFIG.catchState.invulnerable; }
+    for (const e of this.world.ofType('nextbot')) if (e.y < limit) this.world.remove(e);
   }
 
   _onCaught(bot) {

@@ -41,6 +41,7 @@ export const CONFIG = {
     floorDepth: 4,
     shadowPad: 2,
     aimMargin: 3,
+    voidMargin: 2,
   },
   /** Loading bar slices (fractions of the whole bar): assets end, map end; shaders take the rest. */
   loading: { assets: 0.08, map: 0.7, uploadBatch: 4 },

@@ -5,14 +5,13 @@ Bake a Source-engine map exported as glTF (Sketchfab "gm_construct") into the co
     python3 tools/bake_map.py <dir containing scene.gltf + scene.bin + textures/> assets/maps/gm_construct
 
 Output (all in the map's own units, 1 unit = 100 Source units; the game scales it to the player at load):
-  map.json   materials, bounds, collision boxes
+  map.json   materials (with a `collide` flag), bounds; collision is built from the meshes at load
   map.bin    per-material vertex/normal/uv/index arrays (little endian, 4-byte aligned)
   textures/  WebP, max TEXTURE_MAX px
 
 Requires numpy and Pillow. Not needed at runtime. See docs/AGENTS.md "Add a map".
 """
 import json
-import math
 import os
 import sys
 from collections import defaultdict
@@ -22,10 +21,6 @@ from PIL import Image
 
 # ---- tunables -------------------------------------------------------------------------------------
 SKY_Y = 60.0              # geometry whose lowest point is above this is the 3D-skybox miniature: dropped
-CELL = 0.1                # collision raster cell (model units; ~0.27 game units)
-QY = 0.15                 # collision height quantum (model units); times the load scale it must stay below the player's step height
-FLOOR_NY = 0.5            # |normal.y| above this = floor/ceiling, else wall
-UNPAIRED_CEILING = 0.2    # thickness given to a ceiling face that has no floor above it
 TEXTURE_MAX = 1024
 WEBP_QUALITY = 82
 ALPHA_MASK_BELOW = 250    # texture alpha min below this => alpha-tested material
@@ -187,6 +182,7 @@ def bake_render(gl, prims, origin, out_dir):
         materials.append({
             'name': name, 'texture': rel, 'color': [round(c, 3) for c in color], 'alpha': alpha,
             'wrap': [wrap_s, wrap_t], 'decal': starts(name, DECAL), 'water': starts(name, WATER),
+            'collide': not starts(name, NO_COLLIDE),
             'vertices': len(pos), 'indices': len(idx), 'indexBytes': idx.itemsize,
             'pos': push(pos), 'nrm': push(nrm), 'uv': push(uv), 'idx': push(idx),
         })
@@ -194,143 +190,6 @@ def bake_render(gl, prims, origin, out_dir):
         for c in chunks:
             f.write(c)
     return materials
-
-
-# ---- collision -------------------------------------------------------------------------------------
-FLOOR, CEIL, WALL = 0, 1, 2
-NEG = -32768              # collider bottom meaning "solid all the way down"
-
-
-def sample_triangles(tris, lo, nx, nz):
-    """Rasterize triangles into per-cell events (cell, y0, y1, kind). Walls are edge-sampled (conservative); floors and ceilings sample cell centres only, which keeps slopes noise-free."""
-    cell, y0s, y1s, kinds = [], [], [], []
-
-    def emit(ix, iz, y0, y1, kind):
-        ok = (ix >= 0) & (ix < nx) & (iz >= 0) & (iz < nz)
-        cell.append((iz[ok] * nx + ix[ok]).astype(np.int64))
-        y0s.append(np.broadcast_to(y0, ix.shape)[ok])
-        y1s.append(np.broadcast_to(y1, ix.shape)[ok])
-        kinds.append(np.full(ok.sum(), kind, np.int8))
-
-    for a, b, c in tris:
-        n = np.cross(b - a, c - a)
-        ln = np.linalg.norm(n)
-        if ln < 1e-12:
-            continue
-        ny = n[1] / ln
-        kind = FLOOR if ny > FLOOR_NY else CEIL if ny < -FLOOR_NY else WALL
-        for p, q in ((a, b), (b, c), (c, a)):
-            steps = max(1, int(math.ceil(math.hypot(q[0] - p[0], q[2] - p[2]) / (CELL * 0.5))))
-            t = np.linspace(0, 1, steps + 1)[:, None]
-            pt = p + (q - p) * t
-            ix = np.floor((pt[:, 0] - lo[0]) / CELL).astype(np.int64)
-            iz = np.floor((pt[:, 2] - lo[2]) / CELL).astype(np.int64)
-            if kind == WALL:
-                emit(ix, iz, min(a[1], b[1], c[1]), max(a[1], b[1], c[1]), WALL)
-        if kind == WALL:
-            continue
-        # interior cell centres, barycentric in XZ
-        xs, zs = (a[0], b[0], c[0]), (a[2], b[2], c[2])
-        i0, i1 = int(math.floor((min(xs) - lo[0]) / CELL)), int(math.floor((max(xs) - lo[0]) / CELL))
-        j0, j1 = int(math.floor((min(zs) - lo[2]) / CELL)), int(math.floor((max(zs) - lo[2]) / CELL))
-        gi, gj = np.meshgrid(np.arange(i0, i1 + 1), np.arange(j0, j1 + 1))
-        px, pz = lo[0] + (gi + 0.5) * CELL, lo[2] + (gj + 0.5) * CELL
-        d = (b[2] - c[2]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[2] - c[2])
-        if abs(d) < 1e-12:
-            continue
-        w0 = ((b[2] - c[2]) * (px - c[0]) + (c[0] - b[0]) * (pz - c[2])) / d
-        w1 = ((c[2] - a[2]) * (px - c[0]) + (a[0] - c[0]) * (pz - c[2])) / d
-        w2 = 1 - w0 - w1
-        m = (w0 >= 0) & (w1 >= 0) & (w2 >= 0)
-        if m.any():
-            y = w0[m] * a[1] + w1[m] * b[1] + w2[m] * c[1]
-            emit(gi[m], gj[m], y, y, kind)
-    return (np.concatenate(cell), np.concatenate(y0s), np.concatenate(y1s), np.concatenate(kinds))
-
-
-def column_spans(ev):
-    """Solid vertical spans [(bottom, top)] (bottom may be -inf) for one cell from its sorted events (y0, y1, kind)."""
-    spans = []
-    for k, (y0, y1, kind) in enumerate(ev):
-        if kind == WALL:
-            spans.append((y0, y1))
-        elif kind == FLOOR:
-            bottom = -math.inf
-            for j in range(k - 1, -1, -1):
-                if ev[j][2] == CEIL:
-                    bottom = ev[j][0]
-                    break
-            spans.append((bottom, y0))
-        elif not any(e[2] == FLOOR for e in ev[k + 1:]):
-            spans.append((y0, y0 + UNPAIRED_CEILING))
-    spans.sort()
-    merged = []
-    for b, t in spans:
-        if merged and b <= merged[-1][1] + QY * 0.5:
-            merged[-1] = (merged[-1][0], max(merged[-1][1], t))
-        else:
-            merged.append((b, t))
-    return merged
-
-
-def merge_rects(cells):
-    """Greedy rectangle cover of a set of (i, j) cells: runs along i, stacked while identical on consecutive j."""
-    rows = defaultdict(list)
-    for i, j in cells:
-        rows[j].append(i)
-    open_rects, rects = {}, []
-    for j in sorted(rows):
-        runs, cur = [], None
-        for i in sorted(rows[j]):
-            if cur and i == cur[1] + 1:
-                cur[1] = i
-            else:
-                cur = [i, i]
-                runs.append(cur)
-        keys = {(r[0], r[1]) for r in runs}
-        for key in list(open_rects):
-            if key not in keys or open_rects[key][1] != j - 1:
-                rects.append((key, open_rects.pop(key)))
-        for key in keys:
-            if key in open_rects:
-                open_rects[key][1] = j
-            else:
-                open_rects[key] = [j, j]
-    rects.extend(open_rects.items())
-    return rects
-
-
-def bake_collision(prims, gl, origin):
-    g = gl.g
-    tris = []
-    for mat, pos, _nrm, _uv, tri in prims:
-        if starts(g['materials'][mat]['name'], NO_COLLIDE):
-            continue
-        p = pos - origin
-        tris.extend(zip(p[tri[:, 0]], p[tri[:, 1]], p[tri[:, 2]]))
-    allp = np.array([v for t in tris for v in t])
-    lo = allp.min(0) - CELL * 2
-    hi = allp.max(0) + CELL * 2
-    nx, nz = int(math.ceil((hi[0] - lo[0]) / CELL)), int(math.ceil((hi[2] - lo[2]) / CELL))
-    print(f'collision grid {nx}x{nz}, {len(tris)} triangles')
-    cell, y0, y1, kind = sample_triangles(tris, lo, nx, nz)
-    order = np.lexsort((y0, cell))
-    cell, y0, y1, kind = cell[order], y0[order], y1[order], kind[order]
-    bounds = np.flatnonzero(np.diff(cell)) + 1
-    groups = defaultdict(list)
-    for s, e in zip(np.r_[0, bounds], np.r_[bounds, len(cell)]):
-        ev = list(zip(y0[s:e].tolist(), y1[s:e].tolist(), kind[s:e].tolist()))
-        c = int(cell[s])
-        for b, t in column_spans(ev):
-            qb, qt = (NEG if b == -math.inf else round(b / QY)), round(t / QY)
-            if qb == NEG or qt > qb:
-                groups[(qb, qt)].append((c % nx, c // nx))
-    boxes = []
-    for (qb, qt), cells in groups.items():
-        for (i0, i1), (j0, j1) in merge_rects(cells):
-            boxes += [i0, i1 + 1, j0, j1 + 1, qb, qt]
-    print(f'collision boxes: {len(boxes) // 6}')
-    return boxes, (lo, hi, nx, nz)
 
 
 def main():
@@ -344,14 +203,11 @@ def main():
     origin = np.array([(lo[0] + hi[0]) / 2, ground, (lo[2] + hi[2]) / 2])
     print('source bounds', lo.round(2), hi.round(2), 'origin', origin.round(2))
     materials = bake_render(gl, prims, origin, out)
-    boxes, grid = bake_collision(prims, gl, origin)
     meta = {
         'version': 1, 'title': 'gm_construct',
         'credit': gl.g['asset'].get('extras', {}),
         'bounds': {'min': (lo - origin).round(3).tolist(), 'max': (hi - origin).round(3).tolist()},
         'materials': materials,
-        # flat ints, 6 per box: x0 x1 z0 z1 (cells) bottom top (height quanta; bottom == -32768 means unbounded)
-        'collision': {'cell': CELL, 'quantum': QY, 'originX': round(float(grid[0][0]), 4), 'originZ': round(float(grid[0][2]), 4), 'boxes': boxes},
     }
     json.dump(meta, open(os.path.join(out, 'map.json'), 'w'), separators=(',', ':'))
     print('materials', len(materials), 'bin bytes', os.path.getsize(os.path.join(out, 'map.bin')))
