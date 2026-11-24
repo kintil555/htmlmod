@@ -4,6 +4,7 @@ import { Collision } from './Collision.js';
 import { collectTriangles } from './MapLoader.js';
 import { NavGraph } from './NavGraph.js';
 import { SkyAmbient } from './SkyAmbient.js';
+import { Water } from './Water.js';
 
 /** Owns the scene, the baked map (render meshes + colliders) and the entity list. */
 export class World {
@@ -21,6 +22,9 @@ export class World {
     const triangles = collectTriangles(map.group);
     for (const { world, index } of triangles) this.collision.addTriangles(world, index);
     SkyAmbient.bake(triangles, map.bounds);
+    /** The pool (Water.js) when the map has one: depth, ripples, swimming. Null otherwise. */
+    this.water = map.water ? Water : null;
+    if (map.water) Water.bake(map.water, this.collision);
     this.nav = null;
   }
 
@@ -76,6 +80,7 @@ export class World {
   update(dt, ctx) {
     if (this.nav && this.count('nextbot')) this.nav.updateFlow(dt, ctx.player.pos.x, ctx.player.pos.y, ctx.player.pos.z);
     for (const e of [...this.entities]) e.update(dt, ctx);
+    this.water?.update(dt, ctx, this.entities);
     const bots = this.ofType('nextbot');
     for (let i = 0; i < bots.length; i++) {
       for (let j = i + 1; j < bots.length; j++) {

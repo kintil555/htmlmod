@@ -1,10 +1,9 @@
 import * as THREE from 'three/webgpu';
-import { mix } from 'three/tsl';
 import { CONFIG } from '../config.js';
 import { Assets } from '../core/Assets.js';
 import { buildMirrors } from './Mirror.js';
-import { fresnel } from './Fresnel.js';
 import { SkyAmbient } from './SkyAmbient.js';
+import { Water } from './Water.js';
 
 async function fetchOk(url) {
   const r = await fetch(url);
@@ -34,17 +33,7 @@ export function surfaceFor(name) {
 
 function makeMaterial(m, texture) {
   const L = CONFIG.lighting;
-  if (m.water) {
-    const water = new THREE.MeshPhysicalNodeMaterial({
-      color: L.water.color, transparent: true, roughness: L.water.roughness,
-      metalness: 0, depthWrite: false, side: THREE.DoubleSide,
-    });
-    water.opacityNode = mix(L.water.opacity, 1, fresnel(L.water.power));
-    // Indoor pools must not mirror a sky they cannot see: the Fresnel reflection follows sky visibility.
-    water.aoNode = SkyAmbient.node;
-    water.specularIntensityNode = SkyAmbient.specular;
-    return water;
-  }
+  if (m.water) return Water.material();
   const surface = surfaceFor(m.name);
   const material = new THREE.MeshPhysicalNodeMaterial({
     map: texture,
@@ -68,7 +57,7 @@ function makeMaterial(m, texture) {
 /**
  * Builds scene objects and colliders from loaded map data. The whole map is scaled so the map's own
  * player eye height equals CONFIG.player.eyeHeight (map fits the player). Returns:
- * { group, scale, textures, bounds, spawn, credit } in game units. Collision is derived from the meshes
+ * { group, scale, textures, bounds, spawn, credit, water } in game units (`water` = the pool's bounds + surface height, or null; see Water.js). Collision is derived from the meshes
  * themselves (see collectTriangles); each material's `collide` flag (set by the baker) opts it in or out.
  */
 export function buildMap({ def, meta, buffer }) {
@@ -77,6 +66,7 @@ export function buildMap({ def, meta, buffer }) {
   group.name = def.id;
   group.scale.setScalar(scale);
   const textures = new Set();
+  let water = null;
 
   for (const m of meta.materials) {
     if (m.mirror) {
@@ -95,6 +85,15 @@ export function buildMap({ def, meta, buffer }) {
     const Idx = m.indexBytes === 2 ? Uint16Array : Uint32Array;
     geo.setIndex(new THREE.BufferAttribute(new Idx(buffer, m.idx, m.indices), 1));
     geo.computeBoundingSphere();
+    if (m.water) {
+      geo.computeBoundingBox();
+      const bb = geo.boundingBox;
+      water = {
+        minX: Math.min(water?.minX ?? Infinity, bb.min.x * scale), maxX: Math.max(water?.maxX ?? -Infinity, bb.max.x * scale),
+        minZ: Math.min(water?.minZ ?? Infinity, bb.min.z * scale), maxZ: Math.max(water?.maxZ ?? -Infinity, bb.max.z * scale),
+        y: Math.max(water?.y ?? -Infinity, bb.max.y * scale),
+      };
+    }
 
     const texture = m.texture ? Assets.get(def.url + m.texture) : null;
     if (texture) textures.add(texture);
@@ -119,6 +118,7 @@ export function buildMap({ def, meta, buffer }) {
     bounds: worldBounds,
     spawn: { x: def.spawn.x * scale, y: def.spawn.y * scale, z: def.spawn.z * scale, yaw: def.spawn.yaw },
     credit: meta.credit,
+    water,
   };
 }
 

@@ -13,6 +13,7 @@ export const STR = {
       ] },
       { title: 'Controls', keys: [
         ['W A S D', 'Move'], ['Mouse', 'Look'], ['Shift', 'Sprint'], ['Space', 'Jump'],
+        ['Space / C (in water)', 'Swim up / dive. W S swim where you look'],
         ['Q (hold)', 'Spawn menu. Tap Q to keep it open, tap again to close'],
         ['R', 'Remove the nextbot or prop under the crosshair'],
         ['Esc', 'Pause menu'],

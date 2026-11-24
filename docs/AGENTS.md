@@ -39,6 +39,8 @@ One game, one style. Everything is a library. **Extend, never duplicate.**
 
 **Sun effects + AO:** `world/PostFx.js` (TSL pipeline: GTAO ambient occlusion `CONFIG.lighting.ao`, god rays through the sun shadow map, sun glow, lens flare, bloom, tone mapping, FXAA). Tunables: `CONFIG.lighting.sunFx`. Players toggle it in Settings (`sunEffects`). The renderer is `WebGPURenderer` and falls back to its WebGL2 backend by itself; GLSL `ShaderMaterial` does not work with it, use node materials.
 
+**Water:** a map material baked with `water: true` becomes the pool (`world/Water.js`, tunables `CONFIG.water`). At load the pool's depth is baked from the map's collision (0 = land), which drives clarity/colour, shoreline foam, swimming and the under-water check. `world/WaterSim.js` (pure data, `node test/water.test.mjs`) is the ripple + foam simulation; the player and nextbots disturb it when they wade, swim or dive in (`Water.update`, called by `World.update`). The material shows wave + ripple normals, Fresnel sky reflection, foam and sun glitter (from below: a Snell window). Under water the camera gets absorption fog from a post effect in `PostFx.js` (driven by `Water.uniforms`). Swimming lives in `Player._swim` (`CONFIG.water.swim`; Space up, C dive, W/S along the look direction). A map without a water material costs nothing.
+
 **Add a new content file:** import it in `src/content/index.js`.
 
 ## Layout

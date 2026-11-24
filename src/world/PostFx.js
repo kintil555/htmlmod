@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { pass, mrt, output, normalView, mix, renderOutput, uniform, color, vec4, float, screenUV, getViewPosition, normalize, dot, pow, max, smoothstep, isBackgroundDepth } from 'three/tsl';
+import { pass, mrt, output, normalView, mix, renderOutput, uniform, color, vec3, vec4, float, screenUV, getViewPosition, normalize, dot, pow, max, min, exp, select, smoothstep, isBackgroundDepth } from 'three/tsl';
 import { godrays } from 'three/addons/tsl/display/GodraysNode.js';
 import { bilateralBlur } from 'three/addons/tsl/display/BilateralBlurNode.js';
 import { depthAwareBlend } from 'three/addons/tsl/display/depthAwareBlend.js';
@@ -8,6 +8,7 @@ import { lensflare } from 'three/addons/tsl/display/LensflareNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
 import { fxaa } from 'three/addons/tsl/display/FXAANode.js';
 import { CONFIG } from '../config.js';
+import { Water } from './Water.js';
 
 /**
  * Frame pipeline (TSL). Scene (+ normals) -> GTAO -> [god rays (raymarched through the whole-map shadow map of `rayLight`) + sun glow + lens flare +
@@ -73,8 +74,22 @@ export class PostFx {
     const sun = halo.add(disc).mul(skyMask);
     const glow = vec4(sun, 0);
     const flareSource = vec4(disc.mul(skyMask), 1);
+    // Camera under water (Water.js): per-channel absorption along the ray, up to the surface when the ray leaves the water, so deep
+    // water turns blue and dark, red dies first, and looking up shows a bright window. Does nothing (under = 0) elsewhere.
+    const WU = Water.uniforms;
+    const camWorld = uniform(camera.matrixWorld);
+    const rayY = camWorld.mul(vec4(rayView, 0)).y;
+    const hitDist = getViewPosition(screenUV, sceneDepth.sample(screenUV).r, projInverse).length();
+    const surfDist = select(rayY.greaterThan(0.001), WU.camDepth.div(rayY), float(1e4));
+    const waterDist = min(select(skyMask.greaterThan(0.5), float(1e4), hitDist), surfDist);
+    const underwater = rgb => {
+      const t = exp(WU.absorb.mul(waterDist).negate());
+      const fogged = rgb.mul(t).add(WU.fogColor.mul(vec3(1, 1, 1).sub(t)));
+      return rgb.add(fogged.sub(rgb).mul(WU.under));
+    };
+
     // The sun itself is not a toggleable effect: it stays when sun effects are off.
-    this.plain = toScreen(vec4(sceneColor.rgb.mul(aoFactor).add(sun), 1));
+    this.plain = toScreen(vec4(underwater(sceneColor.rgb.mul(aoFactor).add(sun)), 1));
 
     const Fl = F.flare;
     const flare = lensflare(flareSource, {
@@ -89,7 +104,7 @@ export class PostFx {
     const bloomPass = bloom(sceneColor, B.strength, B.radius, B.threshold);
 
     const composite = withRays.mul(aoFactor).add(bloomPass).add(glow).add(flare.mul(Fl.intensity));
-    this.full = toScreen(vec4(composite.rgb, 1));
+    this.full = toScreen(vec4(underwater(composite.rgb), 1));
     this.setSunEffects(true);
   }
 

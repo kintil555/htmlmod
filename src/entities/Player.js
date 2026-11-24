@@ -140,15 +140,21 @@ export class Player {
     if (wl > 0) { wx /= wl; wz /= wl; }
     const moving = wl > 0;
     this.sprinting = moving && fwd >= 0 && (input.isDown('ShiftLeft') || input.isDown('ShiftRight'));
-    const top = this.sprinting ? c.sprintSpeed : c.walkSpeed;
+    // Water (Water.js): wading slows you, past `swim.at` of the body under water you swim.
+    const sw = CONFIG.water.swim;
+    const sub = world.water?.submersion(this.pos, c.height) ?? 0;
+    const swimming = sub >= sw.at;
+    const top = (this.sprinting ? c.sprintSpeed : c.walkSpeed) * (1 - sw.slow * sub);
 
-    const acc = c.accel * (this.onGround ? 1 : c.airControl) * dt;
+    const acc = c.accel * (swimming ? sw.accel : this.onGround ? 1 : c.airControl) * dt;
     let ax = wx * top - this.vel.x; let az = wz * top - this.vel.z;
     const al = Math.hypot(ax, az);
     if (al > acc) { ax *= acc / al; az *= acc / al; }
     this.vel.x += ax; this.vel.z += az;
+    if (sub > 0) { const k = Math.exp(-sw.dragXZ * sub * dt); this.vel.x *= k; this.vel.z *= k; }
 
-    if (space && this.onGround) { this.vel.y = c.jumpSpeed; this.onGround = false; }
+    if (swimming) this._swim(dt, input, space, spacePressed, sub, fwd, top);
+    else if (space && this.onGround) { this.vel.y = c.jumpSpeed; this.onGround = false; }
     else if (spacePressed && !this.onGround && this.wallCd <= 0) this._wallJump(world, wx, wz, wl > 0, sin, cos);
 
     // Horizontal move + collide.
@@ -164,7 +170,8 @@ export class Player {
     // Vertical.
     const prevY = this.pos.y;
     const wasGround = this.onGround;
-    this.vel.y -= c.gravity * dt;
+    this.vel.y -= c.gravity * (1 - sw.buoyancy * sub) * dt;
+    if (sub > 0) this.vel.y *= Math.exp(-sw.dragY * sub * dt);
     this.pos.y += this.vel.y * dt;
     if (this.vel.y > 0) {
       const ceil = world.collision.ceilingHeight(this.pos.x, this.pos.z, this.radius, prevY, c.height);
@@ -187,6 +194,17 @@ export class Player {
     const nf = this.camera.fov + (fov - this.camera.fov) * Math.min(1, dt * 8);
     if (Math.abs(nf - this.camera.fov) > 0.01) { this.camera.fov = nf; this.camera.updateProjectionMatrix(); }
     this.syncCamera();
+  }
+
+  /** Swimming: Space rises, C dives, W/S swim along the look direction, and a Space press at the surface hops out. */
+  _swim(dt, input, space, spacePressed, sub, fwd, top) {
+    const sw = CONFIG.water.swim;
+    const dive = !this.frozen && input.isDown('KeyC');
+    this.vel.y += ((space ? sw.up : 0) - (dive ? sw.down : 0)) * dt;
+    if (fwd !== 0) this.vel.y += (Math.sin(this.pitch) * fwd * top * sw.pitchSpeed - this.vel.y) * Math.min(1, dt * 6);
+    this.vel.y = Math.max(-sw.downMax, Math.min(sw.upMax, this.vel.y));
+    if (spacePressed && sub < 0.9) this.vel.y = Math.max(this.vel.y, sw.exitJump);
+    this.onGround = false;
   }
 
   /**
