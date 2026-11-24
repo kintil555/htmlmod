@@ -4,6 +4,7 @@ import { CONFIG } from '../config.js';
 import { Assets } from '../core/Assets.js';
 import { buildMirrors } from './Mirror.js';
 import { fresnel } from './Fresnel.js';
+import { buildRoofField, skyAmbientNode } from './SkyLight.js';
 
 async function fetchOk(url) {
   const r = await fetch(url);
@@ -42,7 +43,7 @@ function makeMaterial(m, texture) {
     return water;
   }
   const surface = surfaceFor(m.name);
-  return new THREE.MeshPhysicalMaterial({
+  return new THREE.MeshPhysicalNodeMaterial({
     map: texture,
     color: new THREE.Color().setRGB(m.color[0], m.color[1], m.color[2]),
     roughness: surface.roughness,
@@ -69,6 +70,7 @@ export function buildMap({ def, meta, buffer }) {
   group.name = def.id;
   group.scale.setScalar(scale);
   const textures = new Set();
+  const solids = []; // meshes that can roof something over the player: they feed the sky-visibility field
 
   for (const m of meta.materials) {
     if (m.mirror) {
@@ -98,15 +100,23 @@ export function buildMap({ def, meta, buffer }) {
     mesh.userData.collide = m.collide;
     mesh.matrixAutoUpdate = false;
     group.add(mesh);
+    if (!m.water && !m.decal && m.collide) solids.push(mesh);
   }
   group.matrixAutoUpdate = false;
   group.updateMatrix();
   group.updateMatrixWorld(true);
 
   const b = meta.bounds;
+  const worldBounds = { minX: b.min[0] * scale, maxX: b.max[0] * scale, minY: b.min[1] * scale, maxY: b.max[1] * scale, minZ: b.min[2] * scale, maxZ: b.max[2] * scale };
+
+  // Covered places get little sky ambient light (see SkyLight.js); every opaque map material shares one node.
+  const skyField = buildRoofField(solids, scale, worldBounds);
+  const skyAmbient = skyAmbientNode(skyField);
+  group.traverse(o => { if (o.isMesh && !o.userData.noAim && o.material?.isMeshPhysicalNodeMaterial) o.material.aoNode = skyAmbient; });
+
   return {
     group, scale, textures: [...textures],
-    bounds: { minX: b.min[0] * scale, maxX: b.max[0] * scale, minY: b.min[1] * scale, maxY: b.max[1] * scale, minZ: b.min[2] * scale, maxZ: b.max[2] * scale },
+    bounds: worldBounds,
     spawn: { x: def.spawn.x * scale, y: def.spawn.y * scale, z: def.spawn.z * scale, yaw: def.spawn.yaw },
     credit: meta.credit,
   };
