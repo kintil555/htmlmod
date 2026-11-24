@@ -91,12 +91,12 @@ export const CONFIG = {
     /** Fallback surface for map materials that match nothing in `surfaces`. */
     material: { roughness: 0.9, metalness: 0 },
     /**
-     * `blur` (world units, about 2 standard deviations) smooths the roof-height field, so the edge of covered areas is a soft gradient. minAmbient 1 = mask off.
+     * `voxel` (world units) is the size of the baked sky-openness volume: bigger = softer and cheaper. minAmbient 1 = mask off.
      * Ambient light that reaches covered places (rooms, tunnels, under overhangs). `minAmbient` is what stays
      * under a roof (0 = pitch black), `offset`/`margin`/`softness` are world units for the roof test, `resolution` the
      * roof-height grid cells across the longer side of the map.
      */
-    skylight: { minAmbient: 0.12, blur: 2.5, offset: 0.5, margin: 0.15, softness: 0.6, resolution: 2048 },
+    skylight: { minAmbient: 0.12, voxel: 1, offset: 0.5, margin: 0.15, softness: 0.6, resolution: 2048 },
     /**
      * Surface classes, picked by the first `match` hitting the baked material name. roughness/metalness shape the
      * highlight; `specular` (0..1) is the Fresnel reflectance of non-metals (how much sky shows at grazing angles);

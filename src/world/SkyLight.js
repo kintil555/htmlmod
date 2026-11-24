@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { texture, vec2, positionWorld, normalWorld, smoothstep, mix } from 'three/tsl';
+import { texture3D, vec3, positionWorld, normalWorld, smoothstep, mix } from 'three/tsl';
 import { CONFIG } from '../config.js';
 
 /**
@@ -8,31 +8,6 @@ import { CONFIG } from '../config.js';
  * tunnels and overhangs lose sky ambient light while the open ground and roofs keep it. Sun light is untouched
  * (it is shadow mapped), only ambient/hemisphere/sky reflection is scaled, through the material's `aoNode`.
  */
-
-/** One box-blur pass along rows (stride 1) or columns (stride n), edge clamped, O(1) per cell via a sliding sum. */
-function boxBlur(src, dst, w, h, w0, vertical) {
-  const len = vertical ? h : w; const lines = vertical ? w : h; const step = vertical ? w : 1; const lineStep = vertical ? 1 : w;
-  const inv = 1 / (2 * w0 + 1);
-  for (let l = 0; l < lines; l++) {
-    const o = l * lineStep;
-    let sum = 0;
-    for (let k = -w0; k <= w0; k++) sum += src[o + Math.min(len - 1, Math.max(0, k)) * step];
-    for (let i = 0; i < len; i++) {
-      dst[o + i * step] = sum * inv;
-      sum += src[o + Math.min(len - 1, i + w0 + 1) * step] - src[o + Math.max(0, i - w0) * step];
-    }
-  }
-}
-
-/** Gaussian-like blur (three box passes each way) with standard deviation `sigma` cells. Smooths the grid out of the roof field. */
-function blurField(field, nx, nz, sigma) {
-  const w0 = Math.max(1, Math.round((Math.sqrt(4 * sigma * sigma + 1) - 1) / 2));
-  const tmp = new Float32Array(field.length);
-  for (let pass = 0; pass < 3; pass++) {
-    boxBlur(field, tmp, nx, nz, w0, false);
-    boxBlur(tmp, field, nx, nz, w0, true);
-  }
-}
 
 /** meshes: THREE.Mesh list in a space where `scale` maps local units to world. Returns the roof-height field. */
 export function buildRoofField(meshes, scale, bounds) {
@@ -80,26 +55,63 @@ export function buildRoofField(meshes, scale, bounds) {
     }
   }
 
-  // Blur: the border between open sky and roof becomes a smooth ramp (no grid steps), sampled with one linear tap in the shader.
-  blurField(roof, nx, nz, S.blur / cell / 2);
-
-  const half = new Uint16Array(roof.length);
-  for (let i = 0; i < roof.length; i++) half[i] = THREE.DataUtils.toHalfFloat(roof[i]);
-  const tex = new THREE.DataTexture(half, nx, nz, THREE.RedFormat, THREE.HalfFloatType);
-  tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
-  tex.wrapS = THREE.ClampToEdgeWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.generateMipmaps = false;
-  tex.needsUpdate = true;
-  return { texture: tex, minX, minZ, sizeX, sizeZ, minY, rangeY };
+  const ext = voxelExtent(sizeX, sizeZ, rangeY);
+  return { texture: buildOpenness(roof, nx, nz, cell, rangeY, ext), minX, minZ, minY, rangeY, ...ext };
 }
 
-/** Shader node, 0..1: how much of the sky ambient reaches this surface (1 in the open, `minAmbient` under a roof). */
+function voxelExtent(sizeX, sizeZ, rangeY) {
+  const v = CONFIG.lighting.skylight.voxel;
+  const gx = Math.ceil(sizeX / v); const gz = Math.ceil(sizeZ / v); const gy = Math.min(192, Math.ceil(rangeY / v));
+  return { gx, gz, gy, extX: gx * v, extZ: gz * v };
+}
+
+/**
+ * Sky openness volume: for every voxel, the fraction of the surrounding roof columns (a 2-voxel-wide footprint, so
+ * neighbours blend) that lie below the voxel's height, i.e. how much open sky is straight above it. Blurring openness
+ * rather than roof height keeps thin roofs and slats open and makes the transition at roof edges a smooth gradient;
+ * the GPU's trilinear filter does the rest.
+ */
+function buildOpenness(roof, nx, nz, cell, rangeY, { gx, gz, gy }) {
+  const v = CONFIG.lighting.skylight.voxel;
+  const vy = rangeY / gy;
+  const data = new Uint16Array(gx * gz * gy);
+  const reach = Math.max(1, Math.round(v / cell)); // fine cells either side of the voxel centre
+  const heights = new Float32Array((2 * reach + 1) * (2 * reach + 1));
+  const one = THREE.DataUtils.toHalfFloat(1);
+  for (let j = 0; j < gz; j++) {
+    const cj = Math.floor((j + 0.5) * v / cell);
+    for (let i = 0; i < gx; i++) {
+      const ci = Math.floor((i + 0.5) * v / cell);
+      let n = 0;
+      for (let dj = -reach; dj <= reach; dj++) {
+        const y = Math.min(nz - 1, Math.max(0, cj + dj));
+        for (let di = -reach; di <= reach; di++) heights[n++] = roof[y * nx + Math.min(nx - 1, Math.max(0, ci + di))];
+      }
+      const sorted = heights.subarray(0, n).sort();
+      let below = 0;
+      for (let k = 0; k < gy; k++) {
+        const level = (k + 0.5) * vy / rangeY;
+        while (below < n && sorted[below] < level) below++;
+        data[k * gx * gz + j * gx + i] = below === n ? one : THREE.DataUtils.toHalfFloat(below / n);
+      }
+    }
+  }
+  const tex = new THREE.Data3DTexture(data, gx, gz, gy);
+  tex.format = THREE.RedFormat; tex.type = THREE.HalfFloatType;
+  tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
+  tex.wrapS = tex.wrapT = tex.wrapR = THREE.ClampToEdgeWrapping;
+  tex.generateMipmaps = false;
+  tex.unpackAlignment = 1;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/** Shader node, 0..1: how much of the sky ambient reaches this surface (1 in the open, `minAmbient` fully covered). */
 export function skyAmbientNode(field) {
   const S = CONFIG.lighting.skylight;
-  // Test a point just off the surface along its normal: ceilings test below themselves, outer walls test outside.
+  // Sample just off the surface along its normal so ceilings read the room below them and outer walls read the air outside.
   const p = positionWorld.add(normalWorld.mul(S.offset));
-  const uv = vec2(p.x.sub(field.minX).div(field.sizeX), p.z.sub(field.minZ).div(field.sizeZ));
-  const roofY = texture(field.texture, uv).r.mul(field.rangeY).add(field.minY);
-  const open = smoothstep(0, S.softness, p.y.sub(roofY).add(S.margin));
+  const uvw = vec3(p.x.sub(field.minX).div(field.extX), p.z.sub(field.minZ).div(field.extZ), p.y.sub(field.minY).div(field.rangeY));
+  const open = smoothstep(0, 1, texture3D(field.texture, uvw).r);
   return mix(S.minAmbient, 1, open);
 }
