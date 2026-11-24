@@ -80,11 +80,11 @@ export const CONFIG = {
   /** Like Source's light_environment, with Valve's own values (HL2 sky list, d2_coast: sun RGB 243 238 224 at -45 degrees, skylight RGB 172 196 204 at about 1/8 of the sun): a nearly white sun with dynamic shadows plus a flat, cool skylight (hemisphere) as ambient; GTAO adds the contact darkness. Sun, sky, ambient light, fog, tone mapping. Elevation/azimuth in degrees; azimuth 0 = +Z, 90 = +X. */
   lighting: {
     toneMapping: 'neutral',
-    exposure: 0.8,
+    exposure: 0.92,
     sun: { elevation: 45, azimuth: 215, intensity: 3.4, color: 0xf3eee0 },
     sky: { turbidity: 3, rayleigh: 1.2, mieCoefficient: 0.004, mieDirectionalG: 0.82, scale: 450000, clouds: { coverage: 0.5, density: 0.55, elevation: 0.5 } },
     environmentIntensity: 0.1,
-    hemisphere: { sky: 0xacc4cc, ground: 0x7a7468, intensity: 0.4 },
+    hemisphere: { sky: 0xacc4cc, ground: 0x7a7468, intensity: 0.46 },
     /**
      * Sun shadows are cascaded shadow maps (three/addons/csm): `cascades` maps of `mapSize`, splitting the view out to `maxFar`
      * world units (nearest cascade is the sharpest). `lightMargin` must exceed the map's height. Bias is a fraction of the
