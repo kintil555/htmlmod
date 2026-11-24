@@ -44,26 +44,29 @@ const uniforms = {
   absorb: uniform(new THREE.Vector3(...U.absorb)),
 };
 const invScale = uniform(1);
+/** Wave clock, shared by the shader and the CPU surface so bodies ride the visible waves. */
+const tU = uniform(0);
 
 const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - L.sun.elevation), THREE.MathUtils.degToRad(L.sun.azimuth));
 const sunColor = new THREE.Color(L.sun.color);
 
 const lerp = (a, b, t) => a.add(b.sub(a).mul(t));
-const S = { ready: false, info: null, sim: null, depth: null, nx: 0, nz: 0, cell: 1, data: null, under: 0, prev: new WeakMap(), material: null };
+const S = { t: 0, ready: false, info: null, sim: null, depth: null, nx: 0, nz: 0, cell: 1, data: null, under: 0, prev: new WeakMap(), material: null };
 const fogShallow = new THREE.Color(U.shallow);
 const fogDeep = new THREE.Color(U.deep);
 
-/** Summed wave sines at world xz `p`: height h and slopes gx, gz (nodes). */
+/** Summed wave sines at world xz `p`: height h, slopes gx, gz and the horizontal Gerstner shift sx, sz that sharpens crests (nodes). */
 function waveField(p) {
-  let h = float(0); let gx = float(0); let gz = float(0);
+  let h = float(0); let gx = float(0); let gz = float(0); let sx = float(0); let sz = float(0);
   for (const [dx, dz, k, speed, amp] of W.waves.layers) {
     const l = Math.hypot(dx, dz);
-    const ph = dot(p, vec2(dx / l, dz / l)).mul(k).add(time.mul(speed));
+    const ph = dot(p, vec2(dx / l, dz / l)).mul(k).add(tU.mul(speed));
     h = h.add(sin(ph).mul(amp));
-    const c = cos(ph).mul(amp * k);
-    gx = gx.add(c.mul(dx / l)); gz = gz.add(c.mul(dz / l));
+    const c = cos(ph);
+    gx = gx.add(c.mul(amp * k * dx / l)); gz = gz.add(c.mul(amp * k * dz / l));
+    sx = sx.add(c.mul(amp * W.waves.choppy * dx / l)); sz = sz.add(c.mul(amp * W.waves.choppy * dz / l));
   }
-  return { h, gx, gz };
+  return { h, gx, gz, sx, sz };
 }
 
 function buildMaterial() {
@@ -141,8 +144,9 @@ function buildMaterial() {
   const wp = modelWorldMatrix.mul(vec4(positionLocal, 1)).xyz;
   const uvV = wp.xz.sub(origin).mul(invSize);
   const fadeV = smoothstep(0, W.waves.shoreFade, texture(depthTex, uvV).level(0).r);
-  const liftV = waveField(wp.xz).h.add(texture(simTex, uvV).level(0).r.mul(W.waves.splashGain)).mul(fadeV);
-  material.positionNode = positionLocal.add(vec3(0, liftV.mul(invScale), 0));
+  const wv = waveField(wp.xz);
+  const liftV = wv.h.add(texture(simTex, uvV).level(0).r.mul(W.waves.splashGain)).mul(fadeV);
+  material.positionNode = positionLocal.add(vec3(wv.sx.mul(fadeV), liftV, wv.sz.mul(fadeV)).mul(invScale));
   // Indoor pools must not mirror a sky they cannot see: the Fresnel reflection follows sky visibility.
   material.aoNode = SkyAmbient.node;
   material.specularIntensityNode = SkyAmbient.specular;
@@ -160,27 +164,77 @@ function depthAt(x, z) {
   return (d[k] * (1 - tx) + d[k + 1] * tx) * (1 - tz) + (d[k + S.nx] * (1 - tx) + d[k + S.nx + 1] * tx) * tz;
 }
 
-/** Surface height at (x, z) when there is water there, else null. */
-function surfaceAt(x, z) {
-  return S.ready && depthAt(x, z) > W.minDepth ? S.info.y : null;
+/** Bilinear sample of a pool-sized grid at world (x, z) (cells clamp at the border). */
+function gridAt(a, x, z) {
+  const fx = (x - S.info.minX) / S.cell - 0.5; const fz = (z - S.info.minZ) / S.cell - 0.5;
+  const i = Math.max(0, Math.min(S.nx - 2, Math.floor(fx))); const j = Math.max(0, Math.min(S.nz - 2, Math.floor(fz)));
+  const tx = Math.max(0, Math.min(1, fx - i)); const tz = Math.max(0, Math.min(1, fz - j));
+  const k = j * S.nx + i;
+  return (a[k] * (1 - tx) + a[k + 1] * tx) * (1 - tz) + (a[k + S.nx] * (1 - tx) + a[k + S.nx + 1] * tx) * tz;
 }
 
-/** Wakes, entry/exit splashes for one body. `feet` = lowest point, speed = horizontal speed. */
+/** The visible surface height at (x, z): waves + ripples exactly as the shader lifts them, so bodies float on them. Null where there is no water. */
+function surfaceAt(x, z) {
+  if (!S.ready) return null;
+  const d = depthAt(x, z);
+  if (d <= W.minDepth) return null;
+  let h = 0;
+  for (const [dx, dz, k, speed, amp] of W.waves.layers) {
+    const l = Math.hypot(dx, dz);
+    h += Math.sin((x * dx + z * dz) / l * k + S.t * speed) * amp;
+  }
+  h += gridAt(S.sim.a, x, z) * W.waves.splashGain;
+  const t = Math.min(1, d / W.waves.shoreFade);
+  return S.info.y + h * t * t * (3 - 2 * t);
+}
+
+/**
+ * What a body does to the water. `feet` = lowest point, speed = horizontal speed. Splashes when its feet or head cross the surface;
+ * while moving through it, lays a wake along the path it just covered: a bow wave raised in front and a trough behind, scaled by
+ * speed, which spreads into a V (the player outruns the ripples). Walking in the shallows pulses a ripple every stride.
+ */
 function disturb(key, x, z, feet, vy, speed, radius, height, dt) {
   const surf = surfaceAt(x, z);
-  const prev = S.prev.get(key);
-  S.prev.set(key, feet);
+  const st = S.prev.get(key);
+  const next = { feet, x, z, dist: st?.dist ?? 0 };
+  S.prev.set(key, next);
   if (surf === null) return;
   const R = W.ripple;
-  const lx = x - S.info.minX; const lz = z - S.info.minZ;
-  const wasBelow = prev !== undefined && prev < surf;
+  const ox = S.info.minX; const oz = S.info.minZ;
   const isBelow = feet < surf;
-  if (prev !== undefined && wasBelow !== isBelow) {
-    const amount = Math.max(R.splashMin, Math.min(R.splashMax, Math.max(-vy * R.splashScale, speed * R.splashSpeed))) * (isBelow ? 1 : R.exit);
-    S.sim.splat(lx, lz, R.splashCells, amount, R.foam);
+  const headBelow = feet + height < surf;
+  if (st) {
+    if ((st.feet < surf) !== isBelow) {
+      const amount = Math.max(R.splashMin, Math.min(R.splashMax, Math.max(-vy * R.splashScale, speed * R.splashSpeed))) * (isBelow ? 1 : R.exit);
+      S.sim.splat(x - ox, z - oz, R.splashCells, amount, R.foam);
+    }
+    if (isBelow && (st.head ?? headBelow) !== headBelow && Math.abs(vy) > 2) S.sim.splat(x - ox, z - oz, R.splashCells, Math.min(R.splashMax, Math.abs(vy) * R.headSplash), R.foam * 0.6);
   }
-  if (isBelow && feet + height > surf && speed > 0.5) {
-    S.sim.splat(lx, lz, Math.max(R.wakeCells, radius * 1.3 / S.cell), speed * R.wake * dt, speed > R.wakeFoamSpeed ? R.foam * 0.5 : 0);
+  next.head = headBelow;
+  if (!isBelow || !st || speed < 0.5) return;
+
+  const mx = x - st.x; const mz = z - st.z;
+  const moved = Math.hypot(mx, mz);
+  if (moved < 1e-4 || moved > 8) return;
+  const dx = mx / moved; const dz = mz / moved;
+  const r = Math.max(R.wakeCells * S.cell, radius * 1.3);
+  const cells = r / S.cell;
+  // Wake while the body pierces the surface (not when fully under it).
+  if (!headBelow) {
+    const n = Math.max(1, Math.ceil(moved / S.cell));
+    const push = Math.min(0.35, speed * R.wake * dt) / n;
+    const foam = speed > R.wakeFoamSpeed ? R.foam * 0.6 : 0;
+    for (let i = 1; i <= n; i++) {
+      const px = st.x + mx * i / n; const pz = st.z + mz * i / n;
+      S.sim.splat(px + dx * r - ox, pz + dz * r - oz, cells, -push * R.bow);
+      S.sim.splat(px - dx * r * 0.6 - ox, pz - dz * r * 0.6 - oz, cells * 1.2, push, foam);
+    }
+  }
+  // Footsteps in the shallows: one ripple per stride, bigger the faster you run.
+  next.dist += moved;
+  if (next.dist >= R.stride) {
+    next.dist = 0;
+    if (feet - (S.info.y - depthAt(x, z)) < R.stepDepth) S.sim.splat(x - ox, z - oz, R.stepCells, speed * R.step, 0);
   }
 }
 
@@ -236,6 +290,8 @@ export const Water = {
   /** Per frame: ripples from the player and nextbots, the ripple sim, and the camera-under-water state for PostFx. */
   update(dt, { player, camera }, entities) {
     if (!S.ready) return;
+    S.t += dt;
+    tU.value = S.t;
     if (!player.frozen) disturb(player, player.pos.x, player.pos.z, player.pos.y, player.vel.y, player.speed, player.radius, CONFIG.player.height, dt);
     for (const e of entities) {
       if (e.type === 'nextbot') disturb(e, e.s.x, e.s.z, e.y, e.vy, Math.hypot(e.s.vx, e.s.vz), e.radius, CONFIG.nextbot.bodyHeight, dt);

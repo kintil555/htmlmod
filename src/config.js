@@ -142,7 +142,8 @@ export const CONFIG = {
    * waves.layers: [dirX, dirZ, wavenumber, speed, amplitude] sine waves that raise/lower the surface (vertex displacement) and tilt the normal.
    * splashGain: how much the simulated ripples/splashes lift the surface; shoreFade: depth over which waves grow from nothing at the shore; meshCell: water mesh grid size.
    * sim: speed = ripple travel speed; shoreDamp/deepDamp = per-step energy kept in the shallows / open water; limit = max |height|.
-   * ripple: wake = push per second per unit of speed; splash* = entry splash from the vertical / horizontal speed; foam = foam laid by a splash.
+   * waves.choppy: Gerstner sharpening of crests. ripple: wake = push per second per unit of speed, laid along the path as a bow wave (bow = share raised in front) with a trough behind (V wake);
+   * stride/step/stepCells/stepDepth = a ripple pulse per stride walked in shallows (step = push per unit of speed); headSplash = head breaking the surface; splash* = entry splash from the vertical / horizontal speed; foam = foam laid by a splash.
    * foam: shoreWidth = foam band at the waterline; crest/crestGain = foam on steep ripple crests. glitter: sun reflection (core = the sun, path = sparkle road).
    * under: view from below. absorb = per-channel (r,g,b) loss per unit of water between you and what you see; windowCos = Snell window edge.
    * swim: at = fraction of the body under water that counts as swimming; buoyancy x gravity at full submersion; drag = per-second damping;
@@ -153,14 +154,14 @@ export const CONFIG = {
     color: { shallow: 0x58c4c0, deep: 0x0a3d5c, foam: 0xf4fbff },
     absorb: 0.11, colorDepth: 0.22, minOpacity: 0.16, maxOpacity: 0.93, roughness: 0.1,
     waves: {
-      rippleGain: 1.2, splashGain: 2.5, shoreFade: 1.2, meshCell: 0.75, detail: 0.035, detailScale: 1.9, fadeNear: 40, fadeFar: 160, farKeep: 0.4,
+      rippleGain: 1.2, splashGain: 2.5, choppy: 1.2, shoreFade: 1.2, meshCell: 0.75, detail: 0.035, detailScale: 1.9, fadeNear: 40, fadeFar: 160, farKeep: 0.4,
       layers: [
         [1, 0.2, 0.31, 0.9, 0.225], [-0.6, 1, 0.47, 1.1, 0.175], [0.3, -1, 0.83, 1.5, 0.11],
         [-1, -0.5, 1.3, 1.9, 0.075], [0.8, 0.7, 2.1, 2.4, 0.045], [-0.2, 1, 3.4, 3, 0.025],
       ],
     },
-    sim: { speed: 11, step: 1 / 60, shoreDamp: 0.86, deepDamp: 0.9935, shoreFull: 0.8, edge: 8, limit: 1.2, foamDecay: 0.55, crest: 0.05, crestGain: 4, idle: 0.0003 },
-    ripple: { wake: 0.2, splashScale: 0.05, splashSpeed: 0.02, splashMin: 0.12, splashMax: 1.2, exit: 0.5, wakeCells: 1.6, splashCells: 2.6, wakeFoamSpeed: 10, foam: 0.9 },
+    sim: { speed: 11, step: 1 / 60, shoreDamp: 0.86, deepDamp: 0.9935, shoreFull: 0.8, edge: 8, limit: 0.6, foamDecay: 0.55, crest: 0.05, crestGain: 4, idle: 0.0003 },
+    ripple: { wake: 0.1, bow: 0.7, stride: 1.5, step: 0.03, stepCells: 2, stepDepth: 0.35, headSplash: 0.05, splashScale: 0.05, splashSpeed: 0.02, splashMin: 0.12, splashMax: 0.6, exit: 0.5, wakeCells: 1.6, splashCells: 2.6, wakeFoamSpeed: 10, foam: 0.9 },
     foam: { crestStart: 0.45, crestEnd: 0.8, shoreWidth: 0.9, shoreSpeed: 0.8, noiseScale: 1.1, noiseSpeed: 0.25, fineScale: 3.4, opacity: 0.92 },
     glitter: { core: 9, corePower: 1600, path: 2.2, pathPower: 90, freq: 14, speed: 1.4, threshold: [0.6, 0.88], opacityGain: 0.6 },
     under: { absorb: [0.2, 0.07, 0.04], shallow: 0x2aa3b8, deep: 0x03182a, depthFade: 0.045, blendRate: 14, windowCos: [0.6, 0.72], windowOpacity: 0.08, mirrorOpacity: 0.9, tint: 0.7 },
