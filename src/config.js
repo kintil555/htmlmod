@@ -77,14 +77,14 @@ export const CONFIG = {
   },
   /** Loading bar slices (fractions of the whole bar): assets end, map end, navigation bake end; shaders take the rest. */
   loading: { assets: 0.08, map: 0.6, nav: 0.75, uploadBatch: 4 },
-  /** Like Source's light_environment: a warm directional sun with dynamic shadows plus a flat, warm skylight (hemisphere) as ambient; GTAO adds the contact darkness. Sun, sky, ambient light, fog, tone mapping. Elevation/azimuth in degrees; azimuth 0 = +Z, 90 = +X. */
+  /** Like Source's light_environment, with Valve's own values (HL2 sky list, d2_coast: sun RGB 243 238 224 at -45 degrees, skylight RGB 172 196 204 at about 1/8 of the sun): a nearly white sun with dynamic shadows plus a flat, cool skylight (hemisphere) as ambient; GTAO adds the contact darkness. Sun, sky, ambient light, fog, tone mapping. Elevation/azimuth in degrees; azimuth 0 = +Z, 90 = +X. */
   lighting: {
     toneMapping: 'neutral',
     exposure: 0.8,
-    sun: { elevation: 38, azimuth: 215, intensity: 3.4, color: 0xffdcae },
+    sun: { elevation: 45, azimuth: 215, intensity: 3.4, color: 0xf3eee0 },
     sky: { turbidity: 3, rayleigh: 1.2, mieCoefficient: 0.004, mieDirectionalG: 0.82, scale: 450000, clouds: { coverage: 0.5, density: 0.55, elevation: 0.5 } },
     environmentIntensity: 0.1,
-    hemisphere: { sky: 0xffe2bd, ground: 0x8a6c4f, intensity: 0.42 },
+    hemisphere: { sky: 0xacc4cc, ground: 0x7a7468, intensity: 0.4 },
     /**
      * Sun shadows are cascaded shadow maps (three/addons/csm): `cascades` maps of `mapSize`, splitting the view out to `maxFar`
      * world units (nearest cascade is the sharpest). `lightMargin` must exceed the map's height. Bias is a fraction of the
@@ -92,7 +92,7 @@ export const CONFIG = {
      * `rays` is the separate whole-map shadow map the god rays march through.
      */
     shadow: { cascades: 4, mapSize: 3072, maxFar: 200, lightMargin: 120, bias: -0.00002, normalBias: 0.04, radius: 2, fade: true, rays: { mapSize: 2048, bias: -0.0004, normalBias: 0.12, radius: 2 } },
-    fog: { color: 0xd9d7cd, density: 0.0016 },
+    fog: { color: 0xc5d2d8, density: 0.0016 },
     /** Fallback surface for map materials that match nothing in `surfaces`. */
     material: { roughness: 0.9, metalness: 0 },
     /**
@@ -121,7 +121,7 @@ export const CONFIG = {
       godrays: { steps: 60, density: 0.6, maxDensity: 0.45, distanceAttenuation: 2, resolutionScale: 0.5, intensity: 0.6, edgeRadius: 2, edgeStrength: 2 },
       bloom: { strength: 0.05, radius: 0.4, threshold: 4 },
       glow: { disc: { power: 3000, intensity: 6 }, halo: { power: 60, intensity: 0.2 }, haze: 0.08 },
-      flare: { intensity: 0.18, threshold: 0.5, ghostSamples: 4, ghostSpacing: 0.3, ghostAttenuation: 25, downSample: 4, tint: 0xffe2b8 },
+      flare: { intensity: 0.18, threshold: 0.5, ghostSamples: 4, ghostSpacing: 0.3, ghostAttenuation: 25, downSample: 4, tint: 0xfff0d8 },
     },
     /** Ambient occlusion (GTAO). `radius` is in eye heights; `strength` 0 = off, 1 = full. Always on, not part of the sun effects toggle. */
     ao: { radius: 0.6, thickness: 1, samples: 16, resolutionScale: 0.5, strength: 0.9 },
