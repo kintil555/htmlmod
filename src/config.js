@@ -87,7 +87,7 @@ export const CONFIG = {
     hemisphere: { sky: 0xacc4cc, ground: 0x8c7e68, intensity: 0.66 },
     /**
      * Ambient visibility (world/SkyAmbient.js). The sky fill and environment light are scaled by how much sky a surface sees,
-     * so spots under roofs, balconies and indoors get `minimum` of the ambient (bounce light) instead of the open-sky amount.
+     * so spots under roofs, balconies and indoors get exactly `minimum` of the ambient (bounce light) instead of the open-sky amount, right up to the walls.
      * Distances are in eye heights: `reach` probe radius, `lift` push out along the normal, `soft` height blend, `bias` slack.
      * `taps` probes per pixel, `resolution` height-field cells along the map's longer side, `dilate` cells roofs are grown by (stops leaks at their edges).
      */

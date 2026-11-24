@@ -14,6 +14,8 @@ const GOLDEN_ANGLE = 2.399963229728653;
  * All distances in CONFIG.lighting.skyAmbient are in eye heights. Until bake() runs everything counts as open sky.
  * Smoothness: heights are stored as half floats and sampled with bilinear filtering (no grid steps), and the probe ring is
  * rotated per pixel by interleaved gradient noise so the few probes dither into a continuous gradient instead of bands.
+ * Enclosure: a point whose own column is covered (a room, tunnel, balcony) ignores the ring completely, because the height
+ * field cannot tell a wall from open air and the ring would otherwise count ground outside the room as sky.
  */
 const K = CONFIG.lighting.skyAmbient;
 const unit = CONFIG.player.eyeHeight;
@@ -28,6 +30,11 @@ const origin = uniform(new THREE.Vector2());
 const invSize = uniform(new THREE.Vector2(1, 1));
 const heights = texture(heightTex);
 
+/** Height field value (highest surface) in the column of `p`. */
+const columnTop = (p) => heights.sample(p.xz.sub(origin).mul(invSize)).r;
+/** Sky seen from a probe: grows from 0 to 1 as `p` rises above the highest surface in its column. */
+const clearance = (p) => smoothstep(0, K.soft * unit, p.y.sub(columnTop(p)).add(K.bias * unit));
+
 const openness = Fn(() => {
   const n = normalWorld.normalize();
   const base = positionWorld.add(n.mul(K.lift * unit));
@@ -41,10 +48,14 @@ const openness = Fn(() => {
     const d = vec3(cs.mul(ca).sub(sn.mul(sa)), 0, sn.mul(ca).add(cs.mul(sa)));
     // Drop the part of the offset that points into the surface, so a wall never probes through itself.
     const q = base.add(d.sub(n.mul(min(dot(d, n), 0))));
-    const h = heights.sample(q.xz.sub(origin).mul(invSize)).r;
-    open = open.add(smoothstep(0, K.soft * unit, q.y.sub(h).add(K.bias * unit)));
+    open = open.add(clearance(q));
   }
-  return mix(K.minimum, 1, open.div(K.taps));
+  // The height field has no walls, so near a wall of a covered room the ring reaches past it onto open ground and reads as sky:
+  // a bright band along every interior edge. The ring only counts where the point's own column is open (its top is more than
+  // `bias` below the point, which every surface seen from above satisfies thanks to `lift`), so anything under a roof or
+  // ceiling gets exactly `minimum` and sky fill never leaks in through walls. Open ground is untouched.
+  const covered = smoothstep(-K.bias * unit, 0, columnTop(base).sub(base.y));
+  return mix(K.minimum, 1, open.div(K.taps).mul(float(1).sub(covered)));
 })();
 
 export const SkyAmbient = {
