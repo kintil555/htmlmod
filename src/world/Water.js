@@ -154,7 +154,9 @@ function buildMaterial() {
   const glitter = vec3(sunColor.r, sunColor.g, sunColor.b).mul(glint).mul(SkyAmbient.specular).mul(select(below, float(0), float(1)));
 
   const aboveColor = lerp(bodyColor, vec3(color(W.color.foam)), foam);
-  const thin = smoothstep(SH.hug * 2, 0.07, thick);
+  // Dry land (baked depth <= 0, beyond the swash) never shows water, whatever the mesh does there: no sheet on terrain.
+  const wet = smoothstep(-SH.height - 0.02, 0.0, depth);
+  const thin = smoothstep(SH.hug * 2, 0.07, thick).mul(wet);
 
   // From below: a clear window straight up, mirror-like beyond the critical angle.
   const tir = float(1).sub(smoothstep(U.windowCos[0], U.windowCos[1], cosV));
@@ -181,7 +183,7 @@ function buildMaterial() {
   const glintMask = saturate(max(glitter.x, max(glitter.y, glitter.z)).mul(2));
   // Held items (children of the camera) dip below the surface when aimed at the water: the surface near the camera is not drawn, so they never look submerged.
   const nearVis = smoothstep(W.viewmodel.near, W.viewmodel.far, dist);
-  const refrMix = nearVis.mul(max(float(1).sub(body.mul(R.opaque)), fresR).mul(float(1).sub(foam)).mul(float(1).sub(glintMask)).mul(select(below, float(0), float(1)))).mul(outOfPass);
+  const refrMix = nearVis.mul(max(float(1).sub(body.mul(R.opaque)), fresR).mul(float(1).sub(foam)).mul(float(1).sub(glintMask)).mul(select(below, float(0), float(1)))).mul(outOfPass).mul(thin);
 
   const material = new THREE.MeshPhysicalNodeMaterial({ transparent: true, roughness: W.roughness, metalness: 0, depthWrite: false, side: THREE.DoubleSide });
   material.colorNode = vec4(select(below, belowColor, aboveColor), 1);
