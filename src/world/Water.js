@@ -354,7 +354,11 @@ export const Water = {
           let bed = -Infinity;
           for (const h of fl) if (h <= info.y) bed = h;
           // Only a real overhang has an underside (downward-facing surface) between the bed and its top; terrain that merely has a lower floor under it does not.
-          if (bed > -Infinity && collision.ceilingHeight(cx, cz, 0.05, bed, 0.05) <= g) g = bed;
+          // The slab must be thin (underside close under its top) with open air between it and the bed; a hill or bank is not a thin slab.
+          if (bed > -Infinity) {
+            const under = collision.ceilingHeight(cx, cz, 0.05, bed, 0.05);
+            if (under <= g && g - under < W.overhangMax && under - bed > 0.2) g = bed;
+          }
         }
         raw[j * nx + i] = g > info.y ? Math.max(-W.landReach, info.y - g) : Math.min(W.maxDepth, info.y - g);
       }

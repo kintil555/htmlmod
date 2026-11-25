@@ -157,6 +157,8 @@ export const CONFIG = {
    */
   water: {
     grid: 192, maxDepth: 40, landReach: 4, minDepth: 0.15,
+    /** Thickest ledge/roof (top minus underside) that still counts as an overhang over the pool; anything thicker is bank or terrain. */
+    overhangMax: 1.5,
     color: { shallow: 0x6aa9a6, deep: 0x1a5470, foam: 0xf4fbff },
     absorb: 0.09, colorDepth: 0.2, minOpacity: 0.12, maxOpacity: 0.86, roughness: 0.02,
     waves: {
