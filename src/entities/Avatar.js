@@ -5,6 +5,7 @@ import { CONFIG } from '../config.js';
 
 const A = CONFIG.net.avatar;
 const G = A.gait;
+const L = A.look;
 
 const COMPONENT = {
   5120: [Int8Array, 'getInt8'], 5121: [Uint8Array, 'getUint8'], 5122: [Int16Array, 'getInt16'],
@@ -154,7 +155,7 @@ export const Avatar = {
       b.parent.getWorldQuaternion(_pq);
       return { bone: b, rest: b.quaternion.clone(), axis: RIGHT.clone().applyQuaternion(_pq.invert()) };
     };
-    const R = Object.fromEntries(['thighL', 'thighR', 'kneeL', 'kneeR', 'armL', 'armR', 'elbowL', 'elbowR', 'spine', 'chest', 'head'].map(k2 => [k2, rig(k2)]));
+    const R = Object.fromEntries(['thighL', 'thighR', 'kneeL', 'kneeR', 'armL', 'armR', 'elbowL', 'elbowR', 'spine', 'chest', 'neck', 'head'].map(k2 => [k2, rig(k2)]));
     const swing = (r, angle) => r.bone.quaternion.setFromAxisAngle(r.axis, angle).multiply(r.rest);
 
     let phase = 0;
@@ -192,7 +193,9 @@ export const Avatar = {
           swing(R.elbowR, G.elbow);
         }
         swing(R.spine, -G.lean * amp);
-        swing(R.head, pitch * G.headPitch);
+        swing(R.chest, pitch * L.chest);
+        swing(R.neck, pitch * L.neck);
+        swing(R.head, pitch * L.head);
         // A caught player falls over backwards and stays down.
         fall += ((dead ? 1 : 0) - fall) * Math.min(1, dt * A.fall.rate);
         wrapper.rotation.x = fall * A.fall.angle;
