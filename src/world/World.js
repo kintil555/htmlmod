@@ -25,7 +25,10 @@ export class World {
     SkyAmbient.bake(triangles, map.bounds);
     /** The pool (Water.js) when the map has one: depth, ripples, swimming. Null otherwise. */
     this.water = map.water ? Water : null;
-    if (map.water) Water.bake(map.water, this.collision);
+    if (map.water) {
+      Water.bake(map.water, this.collision);
+      if (Water.reflectTarget) this.scene.add(Water.reflectTarget);
+    }
     this.nav = null;
   }
 

@@ -111,6 +111,7 @@ export function buildMap({ def, meta, buffer }) {
     mesh.userData.collide = m.collide;
     mesh.matrixAutoUpdate = false;
     mesh.frustumCulled = !m.water;
+    if (m.water) mesh.onBeforeRender = (r, sc, cam) => Water.pass(cam);
     group.add(mesh);
   }
   group.matrixAutoUpdate = false;

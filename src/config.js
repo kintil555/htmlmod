@@ -168,6 +168,8 @@ export const CONFIG = {
     },
     /** Viewmodel: the water surface fades out between `near` and `far` distance from the camera, so a held gun poked into the water stays dry; renderOrder = draw order given to meshes parented to the camera so they draw after (on top of) the water. */
     viewmodel: { near: 0.9, far: 1.4, renderOrder: 1000 },
+    /** Planar reflection of all objects (a second scene render from the mirrored camera): resolution = share of screen size; strength/base = Fresnel gain and floor of the mirror mix; distort = wave-normal shift of the lookup; darken = pull toward the deep colour. */
+    reflection: { resolution: 0.5, strength: 1.1, base: 0.06, distort: 0.35, darken: 0.18 },
     /** Refraction: strength = screen-uv shift per unit of wave slope and thickness (capped at maxThick); distFade shrinks it with distance; tint = body colour blended into the refracted view; opaque = how much depth hides the bottom. */
     refract: { strength: 6, maxThick: 1.5, distFade: 0.02, tint: 0.85, opaque: 0.75 },
     shore: {

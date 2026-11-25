@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import {
   texture, uniform, positionWorld, cameraPosition, cameraViewMatrix, time, vec2, vec3, vec4, float, color, smoothstep, pow, max, saturate,
-  dot, normalize, length, reflect, sin, cos, exp, select, mx_noise_float, positionLocal, modelWorldMatrix, fract, min, screenUV, viewportSharedTexture, viewportSafeUV,
+  dot, normalize, length, reflect, sin, cos, exp, select, mx_noise_float, positionLocal, modelWorldMatrix, fract, min, screenUV, viewportSharedTexture, viewportSafeUV, reflector,
 } from 'three/tsl';
 import { CONFIG } from '../config.js';
 import { SkyAmbient } from './SkyAmbient.js';
@@ -49,6 +49,10 @@ const uniforms = {
   absorb: uniform(new THREE.Vector3(...U.absorb)),
 };
 const invScale = uniform(1);
+/** 1 while a planar-reflection pass renders (the surface itself must not be in its own mirror image), else 0. */
+const inRefl = uniform(0);
+/** The reflection plane: add `Water.reflectTarget` to the scene (Water.bake puts it at the still surface height). */
+const reflectTarget = { obj: null };
 /** Wave clock, shared by the shader and the CPU surface so bodies ride the visible waves. */
 const tU = uniform(0);
 
@@ -157,20 +161,31 @@ function buildMaterial() {
   const belowColor = uniforms.fogColor;
   const belowOpacity = lerp(float(U.windowOpacity), float(U.mirrorOpacity), tir);
 
+  // Planar reflection of every object: the scene rendered from the camera mirrored in the still surface (TSL reflector), with the lookup
+  // shifted by the wave normal so it ripples. Blended in by Fresnel, so it is strongest at grazing angles, like the calm pools of GMod.
+  const RF = W.reflection;
+  const mirror = reflector({ resolutionScale: RF.resolution, bounces: false });
+  mirror.target.rotateX(-Math.PI / 2);
+  reflectTarget.obj = mirror.target;
+  mirror.uvNode = mirror.uvNode.add(vec2(nW.x, nW.z).mul(RF.distort));
+  const reflColor = lerp(mirror.rgb, vec3(color(W.color.deep)), RF.darken);
+  const fresR = saturate(fres.mul(RF.strength).add(RF.base));
+  const outOfPass = float(1).sub(inRefl);
+
   // Refraction: the scene behind the surface (shared viewport copy) is sampled through the wave normal, tinted by the water body, and mixed in
   // where the water is see-through. Offset grows with thickness (none at the waterline) and shrinks with distance. Reflection, foam and glitter stay on top.
   const R = W.refract;
   const off = vec2(nW.x, nW.z).mul(R.strength).mul(min(thick, R.maxThick)).div(dist.mul(R.distFade).add(1));
   const seen = viewportSharedTexture(viewportSafeUV(screenUV.add(off))).rgb;
-  const tinted = lerp(seen, bodyColor, body.mul(R.tint));
+  const tinted = lerp(lerp(seen, bodyColor, body.mul(R.tint)), reflColor, fresR);
   const glintMask = saturate(max(glitter.x, max(glitter.y, glitter.z)).mul(2));
   // Held items (children of the camera) dip below the surface when aimed at the water: the surface near the camera is not drawn, so they never look submerged.
   const nearVis = smoothstep(W.viewmodel.near, W.viewmodel.far, dist);
-  const refrMix = nearVis.mul(float(1).sub(body.mul(R.opaque)).mul(float(1).sub(fres)).mul(float(1).sub(foam)).mul(float(1).sub(glintMask)).mul(select(below, float(0), float(1))));
+  const refrMix = nearVis.mul(max(float(1).sub(body.mul(R.opaque)), fresR).mul(float(1).sub(foam)).mul(float(1).sub(glintMask)).mul(select(below, float(0), float(1)))).mul(outOfPass);
 
   const material = new THREE.MeshPhysicalNodeMaterial({ transparent: true, roughness: W.roughness, metalness: 0, depthWrite: false, side: THREE.DoubleSide });
   material.colorNode = vec4(select(below, belowColor, aboveColor), 1);
-  material.opacityNode = select(below, belowOpacity, thin.mul(nearVis));
+  material.opacityNode = select(below, belowOpacity, thin.mul(nearVis)).mul(outOfPass);
   material.backdropNode = tinted;
   material.backdropAlphaNode = refrMix;
   material.emissiveNode = select(below, belowColor.mul(U.tint), glitter);
@@ -307,6 +322,12 @@ function disturb(key, x, z, feet, vy, speed, radius, height, dt) {
 export const Water = {
   uniforms,
 
+  /** Object3D that defines the reflection plane; the world adds it to the scene (null when the material was never built). */
+  get reflectTarget() { return reflectTarget.obj; },
+
+  /** Called by the water mesh before each draw: the surface hides itself in the reflection pass (any camera but the game's). */
+  pass(cam) { inRefl.value = cam === S.camera ? 0 : 1; },
+
   /** The shared water material (built on first use). */
   material() { return (S.material ??= buildMaterial()); },
 
@@ -349,6 +370,7 @@ export const Water = {
     cellU.value = cell;
     surfY.value = info.y;
     hiCorner.value.set(info.maxX, info.maxZ);
+    if (reflectTarget.obj) { reflectTarget.obj.position.set(0, info.y, 0); reflectTarget.obj.updateMatrixWorld(true); }
     invScale.value = 1 / info.scale;
     Object.assign(S, { info, nx, nz, cell, depth });
     S.sim = new WaterSim({ nx, nz, cell, depth: depth.map(d => Math.max(0, d)), ...CONFIG.water.sim });
@@ -368,6 +390,7 @@ export const Water = {
   update(dt, { player, camera }, entities) {
     if (!S.ready) return;
     S.t += dt;
+    S.camera = camera;
     tU.value = S.t;
     liftHeld(camera, dt);
     if (!player.frozen) disturb(player, player.pos.x, player.pos.z, player.pos.y, player.vel.y, player.speed, player.radius, CONFIG.player.height, dt);
