@@ -166,8 +166,8 @@ export const CONFIG = {
         [-1, -0.5, 1.1, 0.8, 0.003],
       ],
     },
-    /** Viewmodel: the water surface fades out between `near` and `far` distance from the camera, so a held gun poked into the water stays dry. */
-    viewmodel: { near: 0.9, far: 1.4 },
+    /** Viewmodel: the water surface fades out between `near` and `far` distance from the camera, so a held gun poked into the water stays dry; renderOrder = draw order given to meshes parented to the camera so they draw after (on top of) the water. */
+    viewmodel: { near: 0.9, far: 1.4, renderOrder: 1000 },
     /** Refraction: strength = screen-uv shift per unit of wave slope and thickness (capped at maxThick); distFade shrinks it with distance; tint = body colour blended into the refracted view; opaque = how much depth hides the bottom. */
     refract: { strength: 6, maxThick: 1.5, distFade: 0.02, tint: 0.85, opaque: 0.75 },
     shore: {

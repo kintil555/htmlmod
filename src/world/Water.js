@@ -198,6 +198,28 @@ function buildMaterial() {
   return material;
 }
 
+/**
+ * Held items (anything parented to the camera, e.g. a mod's gun) must draw AFTER the water: opaque meshes without depth write (or a low layer)
+ * are painted first and the translucent surface then covers them, so a gun aimed at the pool looks submerged. Moving them to the end of the
+ * transparent queue keeps them on top. Done once per mesh; re-scanned every HELD_SCAN seconds for items added later.
+ */
+const HELD_SCAN = 0.5;
+const held = new WeakSet();
+let heldClock = 0;
+function liftHeld(camera, dt) {
+  heldClock -= dt;
+  if (heldClock > 0) return;
+  heldClock = HELD_SCAN;
+  camera.traverse(o => {
+    if (o === camera || !o.isMesh || held.has(o)) return;
+    held.add(o);
+    o.renderOrder = Math.max(o.renderOrder, W.viewmodel.renderOrder);
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      if (m && !m.transparent) { m.transparent = true; m.needsUpdate = true; }
+    }
+  });
+}
+
 /** Bilinear signed depth at world (x, z): water depth, negative on the bank (how far it is above the surface); 0 outside the pool. */
 function depthAt(x, z) {
   if (!S.ready) return 0;
@@ -338,6 +360,7 @@ export const Water = {
     if (!S.ready) return;
     S.t += dt;
     tU.value = S.t;
+    liftHeld(camera, dt);
     if (!player.frozen) disturb(player, player.pos.x, player.pos.z, player.pos.y, player.vel.y, player.speed, player.radius, CONFIG.player.height, dt);
     for (const e of entities) {
       if (e.type === 'nextbot') disturb(e, e.s.x, e.s.z, e.y, e.vy, Math.hypot(e.s.vx, e.s.vz), e.radius, CONFIG.nextbot.bodyHeight, dt);
