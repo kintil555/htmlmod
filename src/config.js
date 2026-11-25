@@ -246,14 +246,21 @@ export const CONFIG = {
         armL: 'arm_stretch.l_033', armR: 'arm_stretch.r_08',
         elbowL: 'forearm_stretch.l_035', elbowR: 'forearm_stretch.r_010',
         handL: 'hand.l_037', handR: 'hand.r_012',
-        spine: 'spine_01.x_02', chest: 'spine_03.x_04', neck: 'neck.x_05', head: 'head.x_06',
+        root: 'root.x_01', footR: 'foot.r_065', spine: 'spine_01.x_02', chest: 'spine_03.x_04', neck: 'neck.x_05', head: 'head.x_06',
       },
       armDrop: { out: 0.1, forward: 0.04 },
       elbowDrop: { out: 0.06, forward: -0.3 },
-      gait: { stride: 5, swing: 0.75, knee: 1.0, arm: 0.6, elbow: 0.25, lean: 0.12, speedFull: 21, blend: 10 },
+      /**
+       * gait: stride = distance per full step cycle (maxHz caps the cycle rate); swing / knee / arm / elbow = peak angles (rad);
+       * kneeRest = knee flex at ground contact; foot = share of the leg angle the ankle cancels; hipTwist / spineTwist = pelvis and shoulder twist;
+       * lean = forward lean at full speed; elbowSwing = extra elbow bend on the forward arm swing; breath / breathHz = idle chest motion;
+       * blend / airBlend = how fast speed and the air pose fade in.
+       */
+      gait: { stride: 3.8, maxHz: 6, swing: 0.75, knee: 1.15, kneeRest: 0.15, foot: 0.8, arm: 0.6, elbow: 0.25, elbowSwing: 0.5, hipTwist: 0.16, spineTwist: 0.12, lean: 0.12, speedFull: 21, blend: 10, airBlend: 12, breath: 0.015, breathHz: 0.25 },
       /** Share of the look pitch taken by each bone. Spread over three joints so no single one bends far enough to pinch the mesh. */
       look: { chest: 0.2, neck: 0.3, head: 0.3 },
-      air: { thighFront: 0.6, thighBack: -0.3, knee: 0.7, arm: 0.5 },
+      /** Jump pose per leg [left, right]: thigh forward and knee tucked (rad); armOut = arms spread sideways; foot = toes down; lean = torso. */
+      air: { thigh: [0.9, 0.75], knee: [1.25, 1.05], armOut: 1.15, elbow: 0.25, foot: 0.3, lean: 0.05 },
       fall: { angle: 1.45, rate: 7 },
     },
   },
