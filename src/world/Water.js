@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import {
   texture, uniform, positionWorld, cameraPosition, cameraViewMatrix, time, vec2, vec3, vec4, float, color, smoothstep, pow, max, saturate,
-  dot, normalize, length, reflect, sin, cos, exp, select, mx_noise_float, positionLocal, modelWorldMatrix, fract, min,
+  dot, normalize, length, reflect, sin, cos, exp, select, mx_noise_float, positionLocal, modelWorldMatrix, fract, min, screenUV, viewportSharedTexture, viewportSafeUV,
 } from 'three/tsl';
 import { CONFIG } from '../config.js';
 import { SkyAmbient } from './SkyAmbient.js';
@@ -151,16 +151,26 @@ function buildMaterial() {
 
   const aboveColor = lerp(bodyColor, vec3(color(W.color.foam)), foam);
   const thin = smoothstep(SH.hug * 2, 0.07, thick);
-  const aboveOpacity = max(max(body.mul(W.maxOpacity - W.minOpacity).add(W.minOpacity), fres), max(foam.mul(W.foam.opacity), saturate(max(glitter.x, max(glitter.y, glitter.z)).mul(G.opacityGain)))).mul(thin);
 
   // From below: a clear window straight up, mirror-like beyond the critical angle.
   const tir = float(1).sub(smoothstep(U.windowCos[0], U.windowCos[1], cosV));
   const belowColor = uniforms.fogColor;
   const belowOpacity = lerp(float(U.windowOpacity), float(U.mirrorOpacity), tir);
 
+  // Refraction: the scene behind the surface (shared viewport copy) is sampled through the wave normal, tinted by the water body, and mixed in
+  // where the water is see-through. Offset grows with thickness (none at the waterline) and shrinks with distance. Reflection, foam and glitter stay on top.
+  const R = W.refract;
+  const off = vec2(nW.x, nW.z).mul(R.strength).mul(min(thick, R.maxThick)).div(dist.mul(R.distFade).add(1));
+  const seen = viewportSharedTexture(viewportSafeUV(screenUV.add(off))).rgb;
+  const tinted = lerp(seen, bodyColor, body.mul(R.tint));
+  const glintMask = saturate(max(glitter.x, max(glitter.y, glitter.z)).mul(2));
+  const refrMix = float(1).sub(body.mul(R.opaque)).mul(float(1).sub(fres)).mul(float(1).sub(foam)).mul(float(1).sub(glintMask)).mul(select(below, float(0), float(1)));
+
   const material = new THREE.MeshPhysicalNodeMaterial({ transparent: true, roughness: W.roughness, metalness: 0, depthWrite: false, side: THREE.DoubleSide });
   material.colorNode = vec4(select(below, belowColor, aboveColor), 1);
-  material.opacityNode = select(below, belowOpacity, aboveOpacity);
+  material.opacityNode = select(below, belowOpacity, thin);
+  material.backdropNode = tinted;
+  material.backdropAlphaNode = refrMix;
   material.emissiveNode = select(below, belowColor.mul(U.tint), glitter);
   material.normalNode = normalize(cameraViewMatrix.mul(vec4(nF, 0)).xyz);
   // Vertex displacement: waves + ripples + swash lift the (subdivided) surface; local y is world y up to the map scale.

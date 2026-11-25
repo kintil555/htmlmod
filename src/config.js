@@ -166,6 +166,8 @@ export const CONFIG = {
         [-1, -0.5, 1.1, 0.8, 0.003],
       ],
     },
+    /** Refraction: strength = screen-uv shift per unit of wave slope and thickness (capped at maxThick); distFade shrinks it with distance; tint = body colour blended into the refracted view; opaque = how much depth hides the bottom. */
+    refract: { strength: 6, maxThick: 1.5, distFade: 0.02, tint: 0.85, opaque: 0.75 },
     shore: {
       height: 0.05, period: 9, rise: 0.4, draw: 0.3, phasePerDepth: 0.35, reach: 0.9, shallowStart: 0.8, shallowEnd: 3, hug: 0.006, hugSlope: 0.45,
       wobble: [[0.37, 0.23, 0.3], [0.19, -0.41, 0.2]],
