@@ -346,12 +346,13 @@ export const Water = {
         const cx = info.minX + (i + 0.5) * cell; const cz = info.minZ + (j + 0.5) * cell;
         let g = collision.groundHeight(cx, cz, 0.05, info.y + W.landReach, 0);
         // Overhangs (ledges, walkways, roofs) over the pool are not bank: when a standable surface lies at or below the water level under
-        // a higher one, the lower one is the bed and the water continues beneath the overhang.
+        // a higher one that has an underside, the lower one is the bed and the water continues beneath the overhang.
         if (g > info.y) {
           const fl = collision.floorsAt(cx, cz);
           let bed = -Infinity;
           for (const h of fl) if (h <= info.y) bed = h;
-          if (bed > -Infinity) g = bed;
+          // Only a real overhang has an underside (downward-facing surface) between the bed and its top; terrain that merely has a lower floor under it does not.
+          if (bed > -Infinity && collision.ceilingHeight(cx, cz, 0.05, bed, 0.05) <= g) g = bed;
         }
         raw[j * nx + i] = g > info.y ? Math.max(-W.landReach, info.y - g) : Math.min(W.maxDepth, info.y - g);
       }
