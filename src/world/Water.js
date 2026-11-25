@@ -164,11 +164,13 @@ function buildMaterial() {
   const seen = viewportSharedTexture(viewportSafeUV(screenUV.add(off))).rgb;
   const tinted = lerp(seen, bodyColor, body.mul(R.tint));
   const glintMask = saturate(max(glitter.x, max(glitter.y, glitter.z)).mul(2));
-  const refrMix = float(1).sub(body.mul(R.opaque)).mul(float(1).sub(fres)).mul(float(1).sub(foam)).mul(float(1).sub(glintMask)).mul(select(below, float(0), float(1)));
+  // Held items (children of the camera) dip below the surface when aimed at the water: the surface near the camera is not drawn, so they never look submerged.
+  const nearVis = smoothstep(W.viewmodel.near, W.viewmodel.far, dist);
+  const refrMix = nearVis.mul(float(1).sub(body.mul(R.opaque)).mul(float(1).sub(fres)).mul(float(1).sub(foam)).mul(float(1).sub(glintMask)).mul(select(below, float(0), float(1))));
 
   const material = new THREE.MeshPhysicalNodeMaterial({ transparent: true, roughness: W.roughness, metalness: 0, depthWrite: false, side: THREE.DoubleSide });
   material.colorNode = vec4(select(below, belowColor, aboveColor), 1);
-  material.opacityNode = select(below, belowOpacity, thin);
+  material.opacityNode = select(below, belowOpacity, thin.mul(nearVis));
   material.backdropNode = tinted;
   material.backdropAlphaNode = refrMix;
   material.emissiveNode = select(below, belowColor.mul(U.tint), glitter);
