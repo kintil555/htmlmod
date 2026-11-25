@@ -13,7 +13,7 @@ Wrangler prints the URL, for example `https://htmlmod-signal.<your-subdomain>.wo
 - Put it in `CONFIG.net.signalUrl` (`src/config.js`), or
 - open the game once with `?signal=wss://htmlmod-signal.<your-subdomain>.workers.dev` (remembered in the browser).
 
-`ALLOWED_ORIGINS` in `wrangler.toml` lists the sites allowed to connect (`localhost` is always allowed). Add your own domain there.
+`ALLOWED_ORIGINS` in `wrangler.toml` lists the sites allowed to connect (`localhost` is always allowed; requests without an Origin header are refused). Add your own domain there. A per-IP rate limit (`RATE`, 20 connections per minute) guards against room spam and invite-code guessing.
 
 ## Protocol
 - `GET /host` (WebSocket): creates a room. First message `{ t:'hello', id:'host', role:'host', code }`.

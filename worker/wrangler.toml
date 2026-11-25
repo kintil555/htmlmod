@@ -2,9 +2,18 @@ name = "htmlmod-signal"
 main = "src/index.js"
 compatibility_date = "2025-01-01"
 
-# Origins allowed to open a WebSocket (localhost is always allowed). Comma separated, scheme + host.
+# Origins allowed to open a WebSocket (localhost is always allowed; requests with no Origin header are refused). Comma separated, scheme + host.
 [vars]
 ALLOWED_ORIGINS = "https://kintil555.github.io"
+
+# Per-IP limit on /host and /join: 20 connections per 60 s (period can only be 10 or 60). Needs wrangler 4.36+.
+[[ratelimits]]
+name = "RATE"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
 
 [[durable_objects.bindings]]
 name = "ROOMS"

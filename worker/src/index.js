@@ -22,12 +22,20 @@ function randomCode() {
   return Array.from(bytes, b => ALPHABET[b % ALPHABET.length]).join('');
 }
 
+/** Browsers always send Origin on a WebSocket handshake, so a request without one is a script: refused. (A script can still fake the header; the rate limit below is the real guard.) */
 function originAllowed(request, env) {
   const origin = request.headers.get('Origin');
-  if (!origin) return true;
+  if (!origin) return false;
   const allowed = String(env.ALLOWED_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean);
-  if (!allowed.length || allowed.includes(origin)) return true;
+  if (allowed.includes(origin)) return true;
   try { const h = new URL(origin).hostname; return h === 'localhost' || h === '127.0.0.1'; } catch { return false; }
+}
+
+/** Per-IP cap on room creation and join attempts (also slows invite-code guessing). Skipped when the RATE binding is absent. */
+async function rateLimited(request, env) {
+  if (!env.RATE) return false;
+  const { success } = await env.RATE.limit({ key: request.headers.get('CF-Connecting-IP') ?? 'unknown' });
+  return !success;
 }
 
 export default {
@@ -35,6 +43,7 @@ export default {
     const url = new URL(request.url);
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('htmlmod signalling server', { status: 200 });
     if (!originAllowed(request, env)) return new Response('forbidden', { status: 403 });
+    if (await rateLimited(request, env)) return new Response('too many requests', { status: 429 });
 
     if (url.pathname === '/host') {
       for (let i = 0; i < HOST_ATTEMPTS; i++) {
