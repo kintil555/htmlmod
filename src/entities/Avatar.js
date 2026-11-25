@@ -103,7 +103,9 @@ export const Avatar = {
     const bones = skin.joints.map(j => objs[j]);
     const boneInverses = bones.map((_, i) => new THREE.Matrix4().fromArray(inverses, i * 16));
     wrapper.updateMatrixWorld(true);
-    mesh.bind(new THREE.Skeleton(bones, boneInverses), mesh.matrixWorld);
+    // Identity bind matrix, like three's GLTFLoader: the file's inverse bind matrices already hold the whole bind pose (in the rig's own cm units).
+    // Binding with mesh.matrixWorld here applied the node scale twice, so every bone pivoted about the wrong point (flat head, stretched legs).
+    mesh.bind(new THREE.Skeleton(bones, boneInverses), new THREE.Matrix4());
 
     const bone = key => {
       const b = bones.find(x => x.name === A.rig[key]);
