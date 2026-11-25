@@ -4,7 +4,7 @@ import { SpawnTabRegistry, NextbotRegistry, PropRegistry } from '../core/registr
 
 /** Gmod-style Q menu. Tabs come from SpawnTabRegistry; clicking an item calls onSpawn(tab, item). */
 export class SpawnMenu {
-  constructor({ onSpawn, onClear, counts }) {
+  constructor({ onSpawn, onClear, onClose, counts }) {
     this.isOpen = false;
     const defs = () => SpawnTabRegistry.all().map(tab => ({
       id: tab.id,
@@ -26,7 +26,7 @@ export class SpawnMenu {
       Panel({
         body: this.tabs.root,
         className: 'spawnmenu__panel',
-        footer: [this.count, Button({ label: STR.spawn.clear, size: 'sm', onClick: onClear })],
+        footer: [this.count, el('span', { class: 'spawnmenu__close' }, Button({ label: STR.spawn.close, size: 'sm', onClick: onClose })), Button({ label: STR.spawn.clear, size: 'sm', onClick: onClear })],
       }));
   }
   updateCounts() { this.count.textContent = this.counts(); }

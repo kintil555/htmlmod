@@ -255,6 +255,16 @@ export const CONFIG = {
       fall: { angle: 1.45, rate: 7 },
     },
   },
+  /**
+   * Touch controls (ui/TouchControls.js). Shown on phones and tablets (pointer: coarse); ?touch=1 / ?touch=0 forces them on / off.
+   * stick: radius = px, deadzone = share of the radius before a direction counts, sprintAt = share of the radius that also sprints.
+   * lookScale: camera turn per px dragged, relative to a mouse pixel.
+   */
+  touch: {
+    param: 'touch',
+    stick: { radius: 64, deadzone: 0.35, sprintAt: 0.85 },
+    lookScale: 1.6,
+  },
   /** Mod loader (src/mods). Mods are ZIP files with HTML/JS, stored in IndexedDB. API contract: sdk/README.md. */
   mods: {
     /** Current mod API. Bump on breaking changes: mods built for an older API still load but are flagged as outdated. */

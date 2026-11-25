@@ -82,6 +82,93 @@ export function CodeBox({ label, copyLabel, onCopy }) {
   return root;
 }
 
+/**
+ * Floating virtual stick over its zone: appears where the thumb lands. onChange({ x, y, mag }) with x right and y down
+ * in -1..1 and mag 0..1; all zero on release. root.release() lets go (used when the controls hide).
+ */
+export function Joystick({ radius, onChange }) {
+  const knob = el('div', { class: 'ui-stick__knob' });
+  const base = el('div', { class: 'ui-stick__base' }, knob);
+  const root = el('div', { class: 'ui-stick' }, base);
+  root.style.setProperty('--stick-r', `${radius}px`);
+  let id = null; let ox = 0; let oy = 0;
+  const move = (cx, cy) => {
+    let dx = cx - ox; let dy = cy - oy;
+    const d = Math.hypot(dx, dy);
+    if (d > radius) { dx *= radius / d; dy *= radius / d; }
+    knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    onChange({ x: dx / radius, y: dy / radius, mag: Math.min(1, d / radius) });
+  };
+  const release = () => {
+    if (id === null) return;
+    try { root.releasePointerCapture(id); } catch { /* already released */ }
+    id = null;
+    root.classList.remove('is-active');
+    knob.style.transform = '';
+    base.style.left = ''; base.style.top = '';
+    onChange({ x: 0, y: 0, mag: 0 });
+  };
+  root.addEventListener('pointerdown', e => {
+    if (id !== null) return;
+    id = e.pointerId;
+    root.setPointerCapture(id);
+    const r = root.getBoundingClientRect();
+    ox = e.clientX; oy = e.clientY;
+    base.style.left = `${ox - r.left}px`; base.style.top = `${oy - r.top}px`;
+    root.classList.add('is-active');
+    move(ox, oy);
+    e.preventDefault();
+  });
+  root.addEventListener('pointermove', e => { if (e.pointerId === id) move(e.clientX, e.clientY); });
+  for (const type of ['pointerup', 'pointercancel']) root.addEventListener(type, e => { if (e.pointerId === id) release(); });
+  root.release = release;
+  return root;
+}
+
+/** Round on-screen button. onDown() when pressed, onUp() when let go. root.release() lets go. */
+export function HoldButton({ label, onDown, onUp, className = '' }) {
+  const b = el('button', { class: `ui-hold ${className}`.trim(), type: 'button' }, el('span', { text: label }));
+  let id = null;
+  const release = () => {
+    if (id === null) return;
+    try { b.releasePointerCapture(id); } catch { /* already released */ }
+    id = null;
+    b.classList.remove('is-pressed');
+    onUp?.();
+  };
+  b.addEventListener('pointerdown', e => {
+    if (id !== null) return;
+    id = e.pointerId;
+    b.setPointerCapture(id);
+    b.classList.add('is-pressed');
+    onDown?.();
+    e.preventDefault();
+  });
+  for (const type of ['pointerup', 'pointercancel']) b.addEventListener(type, e => { if (e.pointerId === id) release(); });
+  b.release = release;
+  return b;
+}
+
+/** Full-area drag surface: onLook(dx, dy) in px (times `scale`) while a finger moves over it. */
+export function LookPad({ onLook, scale = 1 }) {
+  const root = el('div', { class: 'ui-look' });
+  let id = null; let lx = 0; let ly = 0;
+  root.addEventListener('pointerdown', e => {
+    if (id !== null) return;
+    id = e.pointerId; lx = e.clientX; ly = e.clientY;
+    root.setPointerCapture(id);
+    e.preventDefault();
+  });
+  root.addEventListener('pointermove', e => {
+    if (e.pointerId !== id) return;
+    onLook((e.clientX - lx) * scale, (e.clientY - ly) * scale);
+    lx = e.clientX; ly = e.clientY;
+  });
+  for (const type of ['pointerup', 'pointercancel']) root.addEventListener(type, e => { if (e.pointerId === id) id = null; });
+  root.release = () => { id = null; };
+  return root;
+}
+
 export function SettingControl(def, value, onChange) {
   const row = el('label', { class: 'ui-setting' }, el('span', { class: 'ui-setting__label', text: def.label }));
   if (def.type === 'toggle') {

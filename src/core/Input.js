@@ -1,4 +1,13 @@
 import { Events } from './Events.js';
+import { CONFIG } from '../config.js';
+
+/** True on phones / tablets (coarse primary pointer). ?touch=1 or ?touch=0 overrides. */
+export function detectTouch() {
+  const forced = new URLSearchParams(location.search).get(CONFIG.touch.param);
+  if (forced === '1') return true;
+  if (forced === '0') return false;
+  return window.matchMedia?.('(pointer: coarse)').matches ?? false;
+}
 
 /** Keyboard + mouse-look state. Emits 'keydown' / 'keyup' with {code, repeat}. */
 export class Input {
@@ -29,6 +38,18 @@ export class Input {
     });
   }
   isDown(code) { return this.keys.has(code); }
+  /** Presses or releases a key from code (on-screen controls). Emits the same keydown / keyup events as the keyboard. */
+  setKey(code, down) {
+    if (down) {
+      if (this.keys.has(code)) return;
+      this.keys.add(code);
+      this.events.emit('keydown', { code, repeat: false });
+    } else if (this.keys.delete(code)) {
+      this.events.emit('keyup', { code, repeat: false });
+    }
+  }
+  /** Adds camera movement in px (touch look). */
+  addLook(dx, dy) { this._dx += dx; this._dy += dy; }
   consumeLook() {
     const r = { dx: this._dx, dy: this._dy };
     this._dx = 0; this._dy = 0;

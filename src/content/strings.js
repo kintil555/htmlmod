@@ -18,6 +18,11 @@ export const STR = {
         ['R', 'Remove the nextbot or prop under the crosshair'],
         ['Esc', 'Pause menu'],
       ] },
+      { title: 'Touch screen', lines: [
+        'Left thumb: move (push the stick all the way to sprint). Right thumb: look.',
+        'Jump and Dive are the round buttons at the bottom right. Spawn, Remove and Pause are at the top right.',
+        'Spawn opens the spawn menu; Close leaves it. Remove deletes what the crosshair points at.',
+      ] },
       { title: 'Spawn menu', lines: [
         'Pick a tab, then click an item. It spawns where your crosshair points.',
         'Clear All removes everything you spawned.',
@@ -88,12 +93,14 @@ export const STR = {
     caught: 'Caught', survived: 'Survived', nextbots: 'Nextbots', props: 'Props', players: 'Players',
     caughtBy: name => `Caught by ${name}`,
     hints: 'Q Spawn   R Remove   Esc Menu',
+    touchHints: 'Left thumb moves, right thumb looks',
     clickToResume: 'Click to resume',
   },
   spawn: {
-    clear: 'Clear All', nextbotLimit: 'Nextbot limit reached', propLimit: 'Prop limit reached',
+    clear: 'Clear All', close: 'Close', nextbotLimit: 'Nextbot limit reached', propLimit: 'Prop limit reached',
     removed: name => `Removed ${name}`, nothingToRemove: 'Nothing to remove',
   },
+  touch: { jump: 'Jump', dive: 'Dive', spawn: 'Spawn', remove: 'Remove', pause: 'Pause' },
   net: {
     singleplayer: 'Singleplayer', multiplayer: 'Multiplayer', host: 'Host', join: 'Join', start: 'Start', leave: 'Leave', copy: 'Copy',
     copied: 'Copied', copyFailed: 'Could not copy',

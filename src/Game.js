@@ -16,6 +16,8 @@ import { Nextbot } from './entities/Nextbot.js';
 import { Prop } from './entities/Prop.js';
 import { Avatar } from './entities/Avatar.js';
 import { RemotePlayer } from './entities/RemotePlayer.js';
+import { detectTouch } from './core/Input.js';
+import { TouchControls } from './ui/TouchControls.js';
 import { Net, NetError, describeNetError } from './net/Net.js';
 import { Sync } from './net/Sync.js';
 import { parseInvite } from './net/protocol.js';
@@ -37,6 +39,9 @@ export class Game {
     /** Number of open UI layers that need the mouse (mods call api.cursor.free()). */
     this.cursorHolds = 0;
     this._netBusy = false;
+    /** Phone / tablet: on-screen controls, no pointer lock. */
+    this.touch = detectTouch();
+    this._touchOn = false;
     this.hudTimer = 0;
     this.lastT = 0;
     this._qDownAt = 0;
@@ -92,8 +97,14 @@ export class Game {
     this.spawnMenu = new SpawnMenu({
       onSpawn: (tab, item) => tab.spawn(item.id, this.aimPoint(), this),
       onClear: () => this.clearSpawned(),
+      onClose: () => this._closeSpawnMenu(),
       counts: () => `${STR.hud.nextbots} ${this.world.count('nextbot')}/${CONFIG.limits.maxNextbots}   ${STR.hud.props} ${this.world.count('prop')}/${CONFIG.limits.maxProps}`,
     });
+    document.body.classList.toggle('is-touch', this.touch);
+    if (this.touch) {
+      this.touchUi = new TouchControls({ input: this.input, onPause: () => this.pause() });
+      this.uiRoot.append(this.touchUi.root);
+    }
     this.uiRoot.append(this.hud.root, this.spawnMenu.root);
 
     const settingsScreen = SettingsScreen({ onBack: () => this.screens.back() });
@@ -187,8 +198,9 @@ export class Game {
     this.hud.hideCaught();
     this.hud.show();
     this._refreshHud();
-    if (lock) this._lock(); else this._armRelock();
-    toast(STR.hud.hints);
+    if (lock || this.touch) this._lock(); else this._armRelock();
+    if (this.touch) this._enterFullscreen();
+    toast(this.touch ? STR.hud.touchHints : STR.hud.hints);
     events.emit('game:start');
   }
 
@@ -299,7 +311,25 @@ export class Game {
     };
   }
 
+  /** Touch: full screen + landscape where the browser allows it (needs the tap that started the game; failures are ignored). */
+  _enterFullscreen() {
+    const root = document.documentElement;
+    if (document.fullscreenElement || !root.requestFullscreen) return;
+    root.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation?.lock?.('landscape')).catch(() => {});
+  }
+
+  /** The on-screen controls show only while playing with nothing else open. */
+  _syncTouch() {
+    if (!this.touchUi) return;
+    const on = this.state === 'playing' && !this.paused && !this.uiOpen;
+    if (on === this._touchOn) return;
+    this._touchOn = on;
+    if (on) this.touchUi.show(); else this.touchUi.hide();
+  }
+
   _lock() {
+    // No pointer lock on touch screens: the camera is turned by dragging, and Pause is a button.
+    if (this.touch) return;
     const p = this.canvas.requestPointerLock();
     p?.catch?.(() => {
       if (this.state !== 'playing' || this.paused || this.uiOpen) return;
@@ -421,6 +451,7 @@ export class Game {
   _frame(t) {
     const dt = Math.min((t - this.lastT) / 1000, 0.05);
     this.lastT = t;
+    this._syncTouch();
     if (this.state !== 'playing') return;
     // In a multiplayer session the world keeps running behind the pause menu (the other players are still playing).
     if (!this.paused || Net.active) this._update(dt);

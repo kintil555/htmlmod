@@ -13,6 +13,9 @@ Use desktop Chrome/Edge/Firefox. Renders with WebGPU (automatic WebGL2 fallback)
 ## Controls
 WASD move, Shift sprint, Space jump (sprint at a wall, jump, then tap Space again at the wall to wall-jump: aim with WASD/look to kick sideways or across, push into the wall to climb it), mouse look, in water Space swims up, C dives and W/S swim where you look, hold/tap Q spawn menu, R remove aimed object, Esc pause.
 
+## Touch
+Phones and tablets get on-screen controls automatically: a floating stick on the left (push it all the way to sprint), drag on the right to look, round Jump / Dive buttons at the bottom right, Spawn / Remove / Pause at the top right. `?touch=1` forces them on a desktop (for testing), `?touch=0` turns them off. Tunables: `CONFIG.touch`.
+
 ## Tuning
 Player speed is in `src/config.js` (walk 14, sprint 21, jump 14.5). Nextbot jump/AI tunables are in `CONFIG.nextbot` (pathfinding in `CONFIG.nextbot.nav`; the graph is baked from any map automatically). Nextbot speed/turning/slide are per bot in `src/content/nextbots.js`.
 
