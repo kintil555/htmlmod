@@ -127,7 +127,7 @@ function buildMaterial() {
   const body = float(1).sub(exp(thick.mul(-W.absorb)));
   const tint = float(1).sub(exp(thick.mul(-W.colorDepth)));
   const bodyColor = lerp(vec3(color(W.color.shallow)), vec3(color(W.color.deep)), tint);
-  const fres = pow(float(1).sub(cosV), 5).mul(0.98).add(0.02);
+  const fres = pow(float(1).sub(cosV), 4).mul(0.95).add(0.04);
 
   // Foam: lapping band along the shore + splash/crest foam from the ripple field, broken up by noise.
   const nf = W.foam.noiseScale;

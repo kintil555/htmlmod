@@ -55,8 +55,8 @@ const thick = (d, t) => d + swashLift(X, Z, d, t);
 const waterline = (t) => { let f = 3; for (let d = 3; d >= -2; d -= 0.005) { if (thick(d, t) <= 0) break; f = d; } return f; };
 const line = []; for (let i = 0; i <= steps; i++) line.push(waterline(i / steps * T));
 
-assert.ok(Math.min(...line) < -0.1, 'uprush reaches onto the bank');
-assert.ok(Math.max(...line) > 0.15, 'backwash draws the waterline back into the water');
+assert.ok(Math.min(...line) < -SH.height * 0.4, 'uprush reaches onto the bank');
+assert.ok(Math.max(...line) > SH.height * 0.4, 'backwash draws the waterline back into the water');
 assert.ok(Math.min(...line) > -SH.reach, 'run-up stays below reach');
 let turns = 0; let dir = 0;
 for (let i = 1; i < line.length; i++) { const dd = Math.sign(line[i] - line[i - 1]); if (dd && dd !== dir) { if (dir) turns++; dir = dd; } }

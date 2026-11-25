@@ -157,23 +157,23 @@ export const CONFIG = {
    */
   water: {
     grid: 192, maxDepth: 40, landReach: 4, minDepth: 0.15,
-    color: { shallow: 0x58c4c0, deep: 0x0a3d5c, foam: 0xf4fbff },
-    absorb: 0.11, colorDepth: 0.22, minOpacity: 0.16, maxOpacity: 0.93, roughness: 0.1,
+    color: { shallow: 0x6aa9a6, deep: 0x1a5470, foam: 0xf4fbff },
+    absorb: 0.09, colorDepth: 0.2, minOpacity: 0.12, maxOpacity: 0.86, roughness: 0.02,
     waves: {
-      rippleGain: 1.2, splashGain: 2.5, choppy: 1.2, shoreFade: 1.2, shoreKeep: 0.25, bankFade: 0.3, edgeMargin: 1.5, meshCell: 0.75, detail: 0.035, detailScale: 1.9, fadeNear: 40, fadeFar: 160, farKeep: 0.4,
+      rippleGain: 0.8, splashGain: 1.2, choppy: 0, shoreFade: 1.2, shoreKeep: 0.25, bankFade: 0.3, edgeMargin: 1.5, meshCell: 0.75, detail: 0.01, detailScale: 1.1, fadeNear: 40, fadeFar: 160, farKeep: 0.7,
       layers: [
-        [1, 0.2, 0.31, 0.9, 0.225], [-0.6, 1, 0.47, 1.1, 0.175], [0.3, -1, 0.83, 1.5, 0.11],
-        [-1, -0.5, 1.3, 1.9, 0.075], [0.8, 0.7, 2.1, 2.4, 0.045], [-0.2, 1, 3.4, 3, 0.025],
+        [1, 0.2, 0.22, 0.35, 0.02], [-0.6, 1, 0.38, 0.45, 0.012], [0.3, -1, 0.65, 0.6, 0.006],
+        [-1, -0.5, 1.1, 0.8, 0.003],
       ],
     },
     shore: {
-      height: 0.45, period: 5.5, rise: 0.3, draw: 0.5, phasePerDepth: 0.35, reach: 0.9, shallowStart: 0.8, shallowEnd: 3, hug: 0.006, hugSlope: 0.45,
+      height: 0.05, period: 9, rise: 0.4, draw: 0.3, phasePerDepth: 0.35, reach: 0.9, shallowStart: 0.8, shallowEnd: 3, hug: 0.006, hugSlope: 0.45,
       wobble: [[0.37, 0.23, 0.3], [0.19, -0.41, 0.2]],
     },
-    sim: { speed: 11, step: 1 / 60, shoreDamp: 0.86, deepDamp: 0.9935, shoreFull: 0.8, edge: 8, limit: 0.6, foamDecay: 0.55, crest: 0.05, crestGain: 4, idle: 0.0003 },
-    ripple: { wake: 0.1, bow: 0.7, stride: 1.5, step: 0.03, stepCells: 2, stepDepth: 0.35, headSplash: 0.05, splashScale: 0.05, splashSpeed: 0.02, splashMin: 0.12, splashMax: 0.6, exit: 0.5, wakeCells: 1.6, splashCells: 2.6, wakeFoamSpeed: 10, foam: 0.9 },
-    foam: { crestStart: 0.45, crestEnd: 0.8, shoreWidth: 0.9, frontWidth: 0.85, noiseScale: 1.1, noiseSpeed: 0.25, fineScale: 3.4, opacity: 0.92 },
-    glitter: { core: 9, corePower: 1600, path: 2.2, pathPower: 90, freq: 14, speed: 1.4, threshold: [0.6, 0.88], opacityGain: 0.6 },
+    sim: { speed: 9, step: 1 / 60, shoreDamp: 0.8, deepDamp: 0.985, shoreFull: 0.8, edge: 8, limit: 0.25, foamDecay: 0.55, crest: 0.05, crestGain: 4, idle: 0.0003 },
+    ripple: { wake: 0.05, bow: 0.5, stride: 1.5, step: 0.03, stepCells: 2, stepDepth: 0.35, headSplash: 0.05, splashScale: 0.05, splashSpeed: 0.02, splashMin: 0.12, splashMax: 0.3, exit: 0.5, wakeCells: 1.6, splashCells: 2.6, wakeFoamSpeed: 14, foam: 0.3 },
+    foam: { crestStart: 0.5, crestEnd: 0.9, shoreWidth: 0.25, frontWidth: 0.3, noiseScale: 1.1, noiseSpeed: 0.25, fineScale: 3.4, opacity: 0.45 },
+    glitter: { core: 5, corePower: 1600, path: 0.5, pathPower: 120, freq: 14, speed: 1.4, threshold: [0.6, 0.88], opacityGain: 0.6 },
     under: { absorb: [0.2, 0.07, 0.04], shallow: 0x2aa3b8, deep: 0x03182a, depthFade: 0.045, blendRate: 14, windowCos: [0.6, 0.72], windowOpacity: 0.08, mirrorOpacity: 0.9, tint: 0.7 },
     swim: { at: 0.55, buoyancy: 1.3, dragY: 2.6, dragXZ: 1.4, slow: 0.3, accel: 0.7, up: 46, upMax: 9, down: 46, downMax: 11, exitJump: 11, pitchSpeed: 0.9 },
   },
