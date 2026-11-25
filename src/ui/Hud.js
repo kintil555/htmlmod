@@ -17,11 +17,12 @@ export class Hud {
   }
   show() { this.root.classList.add('is-on'); }
   hide() { this.root.classList.remove('is-on'); this.hideCaught(); }
-  update({ caught, survived, nextbots, props }) {
+  update({ caught, survived, nextbots, props, players = 0 }) {
     const row = (k, v) => el('div', { class: 'hud__row' }, el('span', { text: k }), el('b', { text: String(v) }));
-    this.stats.replaceChildren(
+    this.stats.replaceChildren(...[
       row(STR.hud.caught, caught), row(STR.hud.survived, fmt(survived)),
-      row(STR.hud.nextbots, nextbots), row(STR.hud.props, props));
+      row(STR.hud.nextbots, nextbots), row(STR.hud.props, props),
+      players > 0 ? row(STR.hud.players, players) : null].filter(Boolean));
   }
   showCaught(name) {
     this.caught.textContent = STR.hud.caughtBy(name);

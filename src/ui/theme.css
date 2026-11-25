@@ -17,6 +17,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: var(--c-text); font-family: var(--font); user-select: none; -webkit-user-select: none; }
 #app { position: fixed; inset: 0; }
 img { -webkit-user-drag: none; user-drag: none; }
@@ -89,6 +90,23 @@ kbd { display: inline-block; padding: 2px 8px; border: 1px solid var(--c-line); 
 .mods__badge { display: inline-block; margin: var(--s1) 0 0 var(--s2); padding: 0 var(--s2); font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: #1a1200; background: var(--c-warn); }
 .mods__outdated { margin: var(--s1) 0 0; color: var(--c-warn); }
 .mods__note { margin: var(--s3) 0 0; color: var(--c-dim); font-size: 14px; }
+
+/* ---------- multiplayer ---------- */
+.ui-input { flex: 1; min-width: 0; padding: var(--s2) var(--s3); background: var(--c-ink); color: var(--c-text); border: 1px solid var(--c-line); font: inherit; font-size: 18px; letter-spacing: .08em; user-select: text; -webkit-user-select: text; }
+.ui-input:focus { outline: 2px solid var(--c-accent); outline-offset: 0; }
+.ui-code { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) 0; }
+.ui-code__label { width: 120px; flex: none; color: var(--c-dim); letter-spacing: .1em; text-transform: uppercase; font-size: 14px; }
+.ui-code__value { flex: 1; min-width: 0; padding: var(--s2) var(--s3); background: var(--c-ink); border: 1px solid var(--c-line); letter-spacing: .12em; font-size: 20px; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.net__panel { width: min(640px, 90vw); }
+.net__status { min-height: 1.5em; margin: var(--s3) 0 0; color: var(--c-dim); letter-spacing: .06em; }
+.net__status.is-error { color: var(--c-danger); }
+.net__hint { margin: var(--s2) 0 var(--s3); color: var(--c-dim); line-height: 1.5; }
+.net__title { margin: var(--s3) 0 var(--s2); color: var(--c-accent); letter-spacing: .12em; text-transform: uppercase; font-size: 16px; }
+.net__players { list-style: none; margin: 0; padding: 0; }
+.net__players li { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) 0; border-bottom: 1px solid rgba(255,255,255,.08); letter-spacing: .08em; }
+.net__players li span:first-child { flex: 1; }
+.net__tag { color: var(--c-accent); font-size: 13px; text-transform: uppercase; letter-spacing: .12em; }
+.is-busy { pointer-events: none; filter: grayscale(1) brightness(.7); }
 
 /* ---------- spawn menu ---------- */
 .spawnmenu { position: absolute; inset: 7vh 9vw; display: none; pointer-events: auto; }

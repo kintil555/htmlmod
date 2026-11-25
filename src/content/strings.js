@@ -24,6 +24,14 @@ export const STR = {
       ] },
       { title: 'Credits', lines: [
         'Map: Gm_construct by CHANO (sketchfab.com/Chanino), CC BY 4.0.',
+        'Player model: "MALE 07 (garry\'s mod) rig" by Tung tung tung sahur (sketchfab.com/alvarotorales3), CC BY 4.0.',
+      ] },
+      { title: 'Multiplayer', lines: [
+        'Play, Multiplayer, Host: you get an invite code and a link. Send either to a friend.',
+        'Play, Multiplayer, Join: type the code or paste the link.',
+        'Everyone must have the same mods installed and enabled (same versions). The host refuses players whose mods differ.',
+        'The host runs the nextbots. They chase the living player closest to them. Spawns and removals are shared.',
+        'The invite code is also in the pause menu (Esc).',
       ] },
       { title: 'Dodging nextbots', lines: [
         'You are faster than every nextbot while sprinting, but they never stop chasing.',
@@ -77,7 +85,7 @@ export const STR = {
     },
   },
   hud: {
-    caught: 'Caught', survived: 'Survived', nextbots: 'Nextbots', props: 'Props',
+    caught: 'Caught', survived: 'Survived', nextbots: 'Nextbots', props: 'Props', players: 'Players',
     caughtBy: name => `Caught by ${name}`,
     hints: 'Q Spawn   R Remove   Esc Menu',
     clickToResume: 'Click to resume',
@@ -85,6 +93,37 @@ export const STR = {
   spawn: {
     clear: 'Clear All', nextbotLimit: 'Nextbot limit reached', propLimit: 'Prop limit reached',
     removed: name => `Removed ${name}`, nothingToRemove: 'Nothing to remove',
+  },
+  net: {
+    singleplayer: 'Singleplayer', multiplayer: 'Multiplayer', host: 'Host', join: 'Join', start: 'Start', leave: 'Leave', copy: 'Copy',
+    copied: 'Copied', copyFailed: 'Could not copy',
+    playTitle: 'Play', multiTitle: 'Multiplayer', joinTitle: 'Join a game', lobbyHost: 'Hosting', lobbyGuest: 'Lobby', inviteTitle: 'Invite',
+    codeLabel: 'Invite code', linkLabel: 'Invite link', codePlaceholder: 'Code or link',
+    connecting: 'Connecting…', waitingHost: 'Waiting for the host to start…', hostHint: 'Send the code or the link to your friends. Everyone needs the same mods.',
+    inviteClosed: 'The invite code no longer works (server connection lost).',
+    playersTitle: 'Players', you: 'you', hostTag: 'host', unnamed: 'Player',
+    joined: name => `${name} joined`, left: name => `${name} left`,
+    modsLocked: 'Mods cannot be changed during a multiplayer session',
+    playerName: 'Player name', section: 'Multiplayer',
+    startFailed: 'Could not start the game',
+    err: {
+      signal: 'Cannot reach the game server',
+      timeout: 'Connection timed out',
+      noRoom: 'No game with that code',
+      roomFull: 'The game is full',
+      badCode: 'That is not a valid invite code',
+      lost: 'Connection lost',
+      hostLeft: 'The host closed the game',
+      proto: 'This game version does not match the host',
+      full: 'The game is full',
+      mods: d => {
+        const parts = [];
+        if (d?.missing?.length) parts.push(`install ${d.missing.join(', ')}`);
+        if (d?.extra?.length) parts.push(`disable ${d.extra.join(', ')}`);
+        if (d?.mismatch?.length) parts.push(`use the host's version of ${d.mismatch.join(', ')}`);
+        return `Your mods differ from the host: ${parts.join('; ')}`;
+      },
+    },
   },
   errors: { webgl: 'WebGPU or WebGL2 is not available in this browser.' },
 };

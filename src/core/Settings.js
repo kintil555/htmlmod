@@ -5,7 +5,7 @@ const KEY = 'sandbox.settings.v1';
 /**
  * Settings library. The Settings screen renders itself from definitions.
  * Add an option:  Settings.define({ id:'volume', label:'Volume', type:'slider', min:0, max:1, step:0.05, default:0.8, category:'Audio' })
- * types: 'toggle' | 'slider' | 'select' (select needs options:[{value,label}])
+ * types: 'toggle' | 'slider' | 'select' (select needs options:[{value,label}]) | 'text' (optional maxLength)
  * Read it:        Settings.get('volume')   React: Settings.events.on('change', ({id,value}) => ...)
  */
 class SettingsStore {
@@ -23,6 +23,8 @@ class SettingsStore {
   /** Removes a definition (used by mods on unload). The stored value is kept. */
   undefine(id) { this._defs.delete(id); }
   all() { return [...this._defs.values()]; }
+  /** True once the player (or code) stored a value for this setting. */
+  isSet(id) { return id in this._values; }
   get(id) {
     const d = this._defs.get(id);
     if (!d) throw new Error(`Unknown setting "${id}"`);

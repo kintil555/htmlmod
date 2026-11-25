@@ -14,12 +14,17 @@ import { loadMapData, buildMap } from './world/MapLoader.js';
 import { Player } from './entities/Player.js';
 import { Nextbot } from './entities/Nextbot.js';
 import { Prop } from './entities/Prop.js';
+import { Avatar } from './entities/Avatar.js';
+import { RemotePlayer } from './entities/RemotePlayer.js';
+import { Net, NetError, describeNetError } from './net/Net.js';
+import { Sync } from './net/Sync.js';
+import { parseInvite } from './net/protocol.js';
 import { el, ScreenManager, toast } from './ui/ui.js';
-import { MainMenuScreen, PauseScreen, HelpScreen, SettingsScreen, ModsScreen } from './ui/screens.js';
+import { MainMenuScreen, PauseScreen, HelpScreen, SettingsScreen, ModsScreen, PlayModeScreen, MultiplayerScreen, JoinScreen, LobbyScreen } from './ui/screens.js';
 import { SpawnMenu } from './ui/SpawnMenu.js';
 import { Hud } from './ui/Hud.js';
 
-/** Orchestrator: state machine (menu | playing), pointer lock, spawn/remove tools, catch rules. */
+/** Orchestrator: state machine (menu | playing), pointer lock, spawn/remove tools, catch rules, multiplayer session (net/). */
 export class Game {
   constructor({ canvas, uiRoot }) {
     this.canvas = canvas;
@@ -31,6 +36,7 @@ export class Game {
     this.respawnTimer = 0;
     /** Number of open UI layers that need the mouse (mods call api.cursor.free()). */
     this.cursorHolds = 0;
+    this._netBusy = false;
     this.hudTimer = 0;
     this.lastT = 0;
     this._qDownAt = 0;
@@ -67,6 +73,7 @@ export class Game {
 
     const onAssets = progress(STR.loadingStage.assets, 0, S.assets);
     onAssets(0);
+    await Avatar.preload();
     await Assets.preload(NextbotRegistry.all().map(d => d.texture), onAssets);
     const mapData = await loadMapData(MapRegistry.get(CONFIG.world.map), progress(STR.loadingStage.map, S.assets, S.map));
 
@@ -81,9 +88,10 @@ export class Game {
     this.input.attach();
     this.player = new Player(this.camera, this.world.spawn);
     this.hud = new Hud();
+    this.sync = new Sync(this);
     this.spawnMenu = new SpawnMenu({
       onSpawn: (tab, item) => tab.spawn(item.id, this.aimPoint(), this),
-      onClear: () => { this.world.clear('nextbot'); this.world.clear('prop'); this.spawnMenu.updateCounts(); },
+      onClear: () => this.clearSpawned(),
       counts: () => `${STR.hud.nextbots} ${this.world.count('nextbot')}/${CONFIG.limits.maxNextbots}   ${STR.hud.props} ${this.world.count('prop')}/${CONFIG.limits.maxProps}`,
     });
     this.uiRoot.append(this.hud.root, this.spawnMenu.root);
@@ -91,21 +99,45 @@ export class Game {
     const settingsScreen = SettingsScreen({ onBack: () => this.screens.back() });
     this.screens.register('mods', ModsScreen({ onBack: () => this.screens.back() }));
     this.screens.register('mainmenu', MainMenuScreen({
-      onPlay: () => this.startGame(),
+      onPlay: () => this.screens.push('playmode'),
       onHelp: () => this.screens.push('help'),
       onSettings: () => { settingsScreen.refresh(); this.screens.push('settings'); },
       onMods: () => this.screens.push('mods'),
     }));
-    this.screens.register('pause', PauseScreen({
+    this.screens.register('playmode', PlayModeScreen({
+      onSingle: () => this.startGame(),
+      onMulti: () => this.screens.push('multiplayer'),
+      onBack: () => this.screens.back(),
+    }));
+    this.screens.register('multiplayer', MultiplayerScreen({
+      onHost: () => this.hostGame(),
+      onJoin: () => { this.joinScreen.setStatus('', false); this.screens.push('join'); },
+      onBack: () => this.screens.back(),
+    }));
+    this.joinScreen = JoinScreen({ onJoin: code => this.joinGame(code), onBack: () => this.screens.back() });
+    this.screens.register('join', this.joinScreen);
+    this.lobby = LobbyScreen({
+      onStart: () => { Net.markStarted(); this.startGame(); },
+      onLeave: () => { this.leaveSession(); this.screens.show('mainmenu'); },
+    });
+    this.screens.register('lobby', this.lobby);
+    this.pauseScreen = PauseScreen({
       onResume: () => this.resume(),
       onHelp: () => this.screens.push('help'),
       onSettings: () => { settingsScreen.refresh(); this.screens.push('settings'); },
       onMods: () => this.screens.push('mods'),
       onQuit: () => this.quitToMenu(),
-    }));
+    });
+    this.screens.register('pause', this.pauseScreen);
     this.screens.register('help', HelpScreen({ onBack: () => this.screens.back() }));
     this.screens.register('settings', settingsScreen);
     this.screens.show('mainmenu');
+
+    Net.events.on('players', () => { this.lobby.refresh(); this.pauseScreen.refresh(); });
+    Net.events.on('signal', ({ up }) => { if (!up) { toast(STR.net.inviteClosed); this.lobby.refresh(); this.pauseScreen.refresh(); } });
+    Net.events.on('start', () => { if (this.state !== 'playing') this.startGame({ lock: false }); });
+    Net.events.on('closed', ({ reason }) => { toast(describeNetError(new NetError(reason))); this.quitToMenu(); });
+    this._openInviteLink();
 
     this._bindInput();
     this.renderer.setAnimationLoop(t => this._frame(t));
@@ -124,6 +156,7 @@ export class Game {
     }
     const bot = this.world.add(new Nextbot(NextbotRegistry.all()[0], Assets.get(NextbotRegistry.all()[0].texture), 0, 0, { x: 0, z: 1 }));
     const prop = this.world.add(new Prop(PropRegistry.all()[0], 0, 0));
+    const avatar = this.world.add(new RemotePlayer('warmup', 'warmup'));
     onProgress(0.7);
     await this.renderer.compileAsync(this.world.scene, this.camera);
     onProgress(0.9);
@@ -133,12 +166,14 @@ export class Game {
     this.fx.render();
     this.world.remove(bot);
     this.world.remove(prop);
+    this.world.remove(avatar);
     onProgress(1);
     await frame();
   }
 
   /* ---------------- state ---------------- */
-  startGame() {
+  /** lock: false when the start was not caused by a click (a guest whose host pressed Start): the first click on the game locks the mouse. */
+  startGame({ lock = true } = {}) {
     this.world.clear('nextbot');
     this.world.clear('prop');
     this.player.respawn();
@@ -152,7 +187,7 @@ export class Game {
     this.hud.hideCaught();
     this.hud.show();
     this._refreshHud();
-    this._lock();
+    if (lock) this._lock(); else this._armRelock();
     toast(STR.hud.hints);
     events.emit('game:start');
   }
@@ -162,6 +197,7 @@ export class Game {
     this.paused = true;
     this.spawnMenu.close();
     this.screens.setBackdrop('dim');
+    this.pauseScreen.refresh();
     this.screens.show('pause');
     events.emit('game:pause');
   }
@@ -174,7 +210,69 @@ export class Game {
     events.emit('game:resume');
   }
 
+  /* ---------------- multiplayer ---------------- */
+  /** Ends the multiplayer session (if any) and forgets the remote players and shared entities. */
+  leaveSession() {
+    Net.leave();
+    this.sync.reset();
+  }
+
+  /** A link with ?join=CODE opens the Join screen with the code filled in. The player still clicks Join (a click is needed to lock the mouse). */
+  _openInviteLink() {
+    const code = parseInvite(new URLSearchParams(location.search).get(CONFIG.net.joinParam));
+    if (!code) return;
+    this.screens.push('playmode');
+    this.screens.push('multiplayer');
+    this.screens.push('join');
+    this.joinScreen.setCode(code);
+  }
+
+  async hostGame() {
+    if (this._netBusy) return;
+    this._netBusy = true;
+    try {
+      await Net.host(Settings.get('playerName'));
+      this.lobby.refresh();
+      this.screens.push('lobby');
+    } catch (err) {
+      toast(describeNetError(err));
+    } finally { this._netBusy = false; }
+  }
+
+  async joinGame(code) {
+    if (this._netBusy) return;
+    this._netBusy = true;
+    this.joinScreen.setBusy(true);
+    try {
+      const welcome = await Net.join(code, Settings.get('playerName'));
+      this.joinScreen.setBusy(false);
+      this.joinScreen.setStatus('', false);
+      if (welcome.started) {
+        this.startGame({ lock: false });
+        this.sync.applySnapshot(welcome.snapshot);
+      } else {
+        this.lobby.refresh();
+        this.screens.push('lobby');
+      }
+    } catch (err) {
+      this.joinScreen.setBusy(false);
+      this.joinScreen.setStatus(describeNetError(err), true);
+    } finally { this._netBusy = false; }
+  }
+
+  /** Removes every nextbot and prop. A guest asks the host, which owns them. */
+  clearSpawned() {
+    if (Net.isGuest) { this.sync.requestClear(); return; }
+    this.world.clear('nextbot');
+    this.world.clear('prop');
+    this.spawnMenu.updateCounts();
+  }
+
+  /** Re-reads the player count into the HUD. */
+  refreshPlayers() { if (this.hud) this._refreshHud(); }
+
   quitToMenu() {
+    this.leaveSession();
     this.state = 'menu';
     this.paused = false;
     this.spawnMenu.close();
@@ -285,15 +383,18 @@ export class Game {
     return p;
   }
 
-  spawnNextbot(id, point) {
-    if (this.world.count('nextbot') >= CONFIG.limits.maxNextbots) { toast(STR.spawn.nextbotLimit); return; }
+  /** quiet: no limit toast (the host serving a guest's request). */
+  spawnNextbot(id, point, { quiet = false } = {}) {
+    if (Net.isGuest) { this.sync.requestSpawn('nextbot', id, point); return; }
+    if (this.world.count('nextbot') >= CONFIG.limits.maxNextbots) { if (!quiet) toast(STR.spawn.nextbotLimit); return; }
     const def = NextbotRegistry.get(id);
     this.world.add(new Nextbot(def, Assets.get(def.texture), point.x, point.z, this.player.pos, point.y));
     this.spawnMenu.updateCounts();
   }
 
-  spawnProp(id, point) {
-    if (this.world.count('prop') >= CONFIG.limits.maxProps) { toast(STR.spawn.propLimit); return; }
+  spawnProp(id, point, { quiet = false } = {}) {
+    if (Net.isGuest) { this.sync.requestSpawn('prop', id, point); return; }
+    if (this.world.count('prop') >= CONFIG.limits.maxProps) { if (!quiet) toast(STR.spawn.propLimit); return; }
     this.world.add(new Prop(PropRegistry.get(id), point.x, point.z, point.y));
     this.spawnMenu.updateCounts();
   }
@@ -305,7 +406,7 @@ export class Game {
     this.raycaster.far = 400;
     const entity = hit?.object.userData.entity;
     if (!entity) { toast(STR.spawn.nothingToRemove); return; }
-    this.world.remove(entity);
+    if (Net.isGuest && entity.nid != null) this.sync.requestRemove(entity); else this.world.remove(entity);
     toast(STR.spawn.removed(entity.displayName));
   }
 
@@ -321,14 +422,17 @@ export class Game {
     const dt = Math.min((t - this.lastT) / 1000, 0.05);
     this.lastT = t;
     if (this.state !== 'playing') return;
-    if (!this.paused) this._update(dt);
+    // In a multiplayer session the world keeps running behind the pause menu (the other players are still playing).
+    if (!this.paused || Net.active) this._update(dt);
     this.fx.render();
   }
 
   _update(dt) {
     const cfg = CONFIG.catchState;
-    this.player.update(dt, this.input, this.world);
-    this.world.update(dt, { player: this.player, camera: this.camera });
+    const live = !this.paused;
+    if (live) this.player.update(dt, this.input, this.world);
+    this.world.update(dt, { player: this.player, target: this.sync.chaseTarget(dt), camera: this.camera, chase: !Net.isGuest });
+    this.sync.update(dt);
     this._voidCheck();
     events.emit('game:update', dt);
 
@@ -341,8 +445,8 @@ export class Game {
         this.hud.hideCaught();
       }
     } else {
-      this.stats.survived += dt;
-      if (this.player.invulnerable <= 0) {
+      if (live) this.stats.survived += dt;
+      if (live && this.player.invulnerable <= 0) {
         for (const bot of this.world.entities) {
           if (bot.type === 'nextbot' && bot.touches(this.player)) { this._onCaught(bot); break; }
         }
@@ -376,6 +480,7 @@ export class Game {
       survived: this.stats.survived,
       nextbots: this.world.count('nextbot'),
       props: this.world.count('prop'),
+      players: Net.active ? Net.players.size : 0,
     });
   }
 }

@@ -43,6 +43,8 @@ One game, one style. Everything is a library. **Extend, never duplicate.**
 
 **Mods (ZIP loader):** `src/mods/` (`Zip.js` reader/writer, `Manifest.js`, `Modules.js` import rewriting, `ModStore.js` IndexedDB, `ModAPI.js` the `api` mods receive, `HtmlMod.js`, `Mods.js` host, `Sdk.js` downloads). Public contract: `sdk/README.md` + `sdk/htmlmod.d.ts` (keep them in sync with `ModAPI.js`, bump `CONFIG.mods.apiVersion` on breaking changes). Engine events for mods are emitted as `events.emit('game:<name>')`. Anything a mod registers must be undone through `own()` in `ModAPI.js`. Run `node test/mods.test.mjs` after touching `src/mods/`. Files shipped by the SDK button are listed in `CONFIG.mods.sdkFiles`.
 
+**Multiplayer:** `src/net/` (`protocol.js` wire types + invite parsing, `modsync.js` mod parity, `Net.js` session/WebRTC, `Sync.js` replication). Star topology: guests connect to the host; `worker/` (Cloudflare Durable Object) only relays signalling. The host owns nextbots and props: it gives each a net id (`nid`) and announces it (`spawned` / `removed`); guest copies are `remote` (Nextbot follows `setTarget`). Every client sends its own player state; `RemotePlayer` + `Avatar` (glTF skinned model, procedural walk) render the others. Any new replicated message: add a `T` type in `protocol.js`, send with `Net.send` / `Net.sendState`, handle it in `Sync._onMsg` / `_onState`; bump `CONFIG.net.protocol` on wire changes. Mods must match on host and guest (`Mods.signature()`), mod changes are locked while a session runs. `ctx.player` is always the local player, `ctx.target` the nextbots' chase target.
+
 **Add a new content file:** import it in `src/content/index.js`.
 
 ## Layout

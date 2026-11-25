@@ -62,6 +62,26 @@ export function Card({ name, image, swatch, onClick }) {
     el('span', { class: 'ui-card__name', text: name }));
 }
 
+/** Single-line text field. onInput(value) on every edit, onEnter(value) on Enter. Returns the <input>. */
+export function TextInput({ value = '', placeholder = '', maxLength = 64, onInput, onEnter }) {
+  const i = el('input', { type: 'text', class: 'ui-input', placeholder, maxlength: String(maxLength), spellcheck: 'false', autocomplete: 'off' });
+  i.value = value;
+  if (onInput) i.addEventListener('input', () => onInput(i.value));
+  if (onEnter) i.addEventListener('keydown', e => { if (e.key === 'Enter') onEnter(i.value); });
+  return i;
+}
+
+/** Label, a selectable value and a Copy button. root.set(text) changes the value; onCopy(text) runs on click. */
+export function CodeBox({ label, copyLabel, onCopy }) {
+  const value = el('output', { class: 'ui-code__value' });
+  const root = el('div', { class: 'ui-code' },
+    el('span', { class: 'ui-code__label', text: label }),
+    value,
+    Button({ label: copyLabel, size: 'sm', onClick: () => onCopy(value.textContent) }));
+  root.set = text => { value.textContent = text; };
+  return root;
+}
+
 export function SettingControl(def, value, onChange) {
   const row = el('label', { class: 'ui-setting' }, el('span', { class: 'ui-setting__label', text: def.label }));
   if (def.type === 'toggle') {
@@ -75,6 +95,8 @@ export function SettingControl(def, value, onChange) {
     i.value = value;
     i.addEventListener('input', () => { out.textContent = i.value; onChange(Number(i.value)); });
     row.append(i, out);
+  } else if (def.type === 'text') {
+    row.append(TextInput({ value, maxLength: def.maxLength ?? 64, onInput: onChange }));
   } else if (def.type === 'select') {
     const s = el('select', { class: 'ui-select' }, def.options.map(o => el('option', { value: o.value, text: o.label })));
     s.value = value;

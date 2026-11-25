@@ -1,0 +1,16 @@
+name = "htmlmod-signal"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Origins allowed to open a WebSocket (localhost is always allowed). Comma separated, scheme + host.
+[vars]
+ALLOWED_ORIGINS = "https://kintil555.github.io"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+# SQLite-backed Durable Object: the only kind available on the free plan.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]

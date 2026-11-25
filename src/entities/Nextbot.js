@@ -35,6 +35,9 @@ export class Nextbot extends Entity {
     this.def = def;
     this.displayName = def.name;
     this.height = def.height;
+    /** Multiplayer guest copy: no AI, follows the host's snapshots (setTarget). */
+    this.remote = false;
+    this._net = null;
     const img = texture.image;
     const width = def.height * (img.width / img.height);
     this.radius = Math.min(1.1, Math.max(0.55, width * 0.28));
@@ -131,9 +134,41 @@ export class Nextbot extends Entity {
     if (Math.hypot(this.wp.x - s.x, this.wp.z - s.z) <= reach) this._jump();
   }
 
-  update(dt, ctx) {
-    const { player, camera } = ctx;
+  /** Guest: latest position from the host. */
+  setTarget(x, y, z) {
+    if (!this._net) { this.s.x = x; this.s.z = z; this.y = y; this.visY = y; }
+    this._net = { x, y, z };
+  }
+
+  /** Guest: glide toward the host's position instead of simulating. */
+  _followHost(dt, camera) {
+    const s = this.s; const t = this._net;
+    if (t) {
+      const k = 1 - Math.exp(-CONFIG.net.botSmooth * dt);
+      if (Math.hypot(t.x - s.x, t.z - s.z) > CONFIG.net.teleportDist || Math.abs(t.y - this.y) > CONFIG.net.teleportDist) { s.x = t.x; s.z = t.z; this.y = t.y; } else {
+        s.x += (t.x - s.x) * k; s.z += (t.z - s.z) * k; this.y += (t.y - this.y) * k;
+      }
+    }
+    this.visY = this.y;
+    const ground = this.world.collision.groundHeight(s.x, s.z, this.radius, this.y, CONFIG.nextbot.stepHeight);
+    this.shadow.position.y = ground - this.visY + 0.03;
+    this.object3d.position.set(s.x, this.visY, s.z);
+    this._faceCamera(camera);
+  }
+
+  /** Billboard: yaw and pitch toward the camera (upright, no roll). */
+  _faceCamera(camera) {
     const s = this.s;
+    const cx = camera.position.x - s.x; const cz = camera.position.z - s.z;
+    const cy = camera.position.y - (this.visY + this.height / 2);
+    this.mesh.rotation.set(-Math.atan2(cy, Math.hypot(cx, cz)), Math.atan2(cx, cz), 0, 'YXZ');
+  }
+
+  update(dt, ctx) {
+    const { camera } = ctx;
+    const player = ctx.target ?? ctx.player;
+    const s = this.s;
+    if (this.remote) { this._followHost(dt, camera); return; }
     if (player.frozen) {
       const k = Math.exp(-2.5 * dt);
       s.vx *= k; s.vz *= k;
@@ -179,9 +214,6 @@ export class Nextbot extends Entity {
     this.shadow.position.y = ground - this.visY + 0.03;
     this.object3d.position.set(s.x, this.visY, s.z);
 
-    // Billboard: yaw and pitch toward the camera (upright, no roll).
-    const cx = camera.position.x - s.x; const cz = camera.position.z - s.z;
-    const cy = camera.position.y - (this.visY + this.height / 2);
-    this.mesh.rotation.set(-Math.atan2(cy, Math.hypot(cx, cz)), Math.atan2(cx, cz), 0, 'YXZ');
+    this._faceCamera(camera);
   }
 }

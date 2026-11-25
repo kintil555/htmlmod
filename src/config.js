@@ -205,6 +205,56 @@ export const CONFIG = {
     settleRate: 5,
   },
   spawnMenu: { stickyMs: 250, closeGraceMs: 800 },
+  /**
+   * Multiplayer (src/net). WebRTC data channels between the host and each guest; the Cloudflare Worker + Durable Object in worker/ only
+   * pairs them up by invite code (signalling). signalUrl: that Worker; override once with ?signal=wss://host (remembered in localStorage).
+   * protocol: bump on any wire change. maxPlayers: host + guests. sendRate: state packets per second. playerSmooth/botSmooth: follow rate of remote players / bots toward the latest packet; teleportDist: jumps farther than this snap.
+   * retargetSec/retargetBias: the host points the nextbots at the nearest living player, re-picked this often; the current target keeps the pick unless another is closer than bias x its distance.
+   * modHashBytes: head + tail of each mod ZIP hashed to prove both sides run the same mod build.
+   * avatar: glTF skinned player model. height = world units head to toe. rig = bone names. gait: stride = distance per full step cycle; angles in radians.
+   */
+  net: {
+    signalUrl: 'wss://htmlmod-signal.kintil555.workers.dev',
+    signalParam: 'signal',
+    signalStorage: 'htmlmod.signal',
+    joinParam: 'join',
+    protocol: 1,
+    maxPlayers: 8,
+    codeLength: 6,
+    codeAlphabet: 'ABCDEFGHJKMNPQRSTUVWXYZ23456789',
+    iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }, { urls: 'stun:stun.l.google.com:19302' }],
+    connectTimeoutMs: 20000,
+    disconnectGraceMs: 5000,
+    signalPingMs: 25000,
+    sendRate: 20,
+    maxBuffered: 65536,
+    playerSmooth: 18,
+    botSmooth: 18,
+    teleportDist: 8,
+    nameMax: 20,
+    retargetSec: 1,
+    retargetBias: 0.8,
+    modHashBytes: 8 * 1024 * 1024,
+    nameTag: { width: 2.4, height: 0.36, above: 0.35, canvasW: 512, canvasH: 80, font: 52, outline: 8 },
+    avatar: {
+      url: 'assets/players/male07/scene.gltf',
+      height: 1.9,
+      rig: {
+        footL: 'foot.l_059', toesL: 'toes_01.l_060',
+        thighL: 'thigh_stretch.l_056', thighR: 'thigh_stretch.r_062',
+        kneeL: 'leg_stretch.l_058', kneeR: 'leg_stretch.r_064',
+        armL: 'arm_stretch.l_033', armR: 'arm_stretch.r_08',
+        elbowL: 'forearm_stretch.l_035', elbowR: 'forearm_stretch.r_010',
+        handL: 'hand.l_037', handR: 'hand.r_012',
+        spine: 'spine_01.x_02', chest: 'spine_03.x_04', head: 'head.x_06',
+      },
+      armDrop: { out: 0.1, forward: 0.04 },
+      elbowDrop: { out: 0.06, forward: -0.3 },
+      gait: { stride: 5, swing: 0.75, knee: 1.0, arm: 0.6, elbow: 0.25, lean: 0.12, speedFull: 21, blend: 10, headPitch: 0.8 },
+      air: { thighFront: 0.6, thighBack: -0.3, knee: 0.7, arm: 0.5 },
+      fall: { angle: 1.45, rate: 7 },
+    },
+  },
   /** Mod loader (src/mods). Mods are ZIP files with HTML/JS, stored in IndexedDB. API contract: sdk/README.md. */
   mods: {
     /** Current mod API. Bump on breaking changes: mods built for an older API still load but are flagged as outdated. */

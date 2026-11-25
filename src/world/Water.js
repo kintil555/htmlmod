@@ -403,6 +403,7 @@ export const Water = {
     if (!player.frozen) disturb(player, player.pos.x, player.pos.z, player.pos.y, player.vel.y, player.speed, player.radius, CONFIG.player.height, dt);
     for (const e of entities) {
       if (e.type === 'nextbot') disturb(e, e.s.x, e.s.z, e.y, e.vy, Math.hypot(e.s.vx, e.s.vz), e.radius, CONFIG.nextbot.bodyHeight, dt);
+      else if (e.type === 'player') disturb(e, e.pos.x, e.pos.z, e.pos.y, 0, e.speed, e.radius, CONFIG.player.height, dt);
     }
     if (S.sim.advance(dt)) {
       S.sim.fill(S.data, THREE.DataUtils.toHalfFloat);

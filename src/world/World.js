@@ -76,7 +76,7 @@ export class World {
   /** Shove nextbots out of a circle (used when the player respawns). */
   pushNextbotsFrom(x, z, radius) {
     for (const e of this.entities) {
-      if (e.type !== 'nextbot') continue;
+      if (e.type !== 'nextbot' || e.remote) continue;
       const dx = e.s.x - x; const dz = e.s.z - z;
       const d = Math.hypot(dx, dz) || 1;
       if (d < radius) { e.s.x = x + (dx / d) * radius; e.s.z = z + (dz / d) * radius; e.s.vx = 0; e.s.vz = 0; }
@@ -84,10 +84,12 @@ export class World {
   }
 
   update(dt, ctx) {
-    if (this.nav && this.count('nextbot')) this.nav.updateFlow(dt, ctx.player.pos.x, ctx.player.pos.y, ctx.player.pos.z);
+    // ctx.player is the local player; ctx.target is who the nextbots chase (multiplayer host: the nearest living player). ctx.chase false: nextbots are only mirrored.
+    const target = ctx.target ?? ctx.player;
+    if (ctx.chase !== false && this.nav && this.count('nextbot')) this.nav.updateFlow(dt, target.pos.x, target.pos.y, target.pos.z);
     for (const e of [...this.entities]) e.update(dt, ctx);
     this.water?.update(dt, ctx, this.entities);
-    const bots = this.ofType('nextbot');
+    const bots = this.ofType('nextbot').filter(b => !b.remote);
     for (let i = 0; i < bots.length; i++) {
       for (let j = i + 1; j < bots.length; j++) {
         const a = bots[i].s; const b = bots[j].s;

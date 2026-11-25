@@ -23,6 +23,18 @@ async function openZip(blob) {
   }
 }
 
+/** SHA-256 (hex) over the first and last CONFIG.net.modHashBytes of a blob: enough to tell two builds of a mod apart without reading a multi-GB ZIP. */
+async function hashBlob(blob) {
+  const n = CONFIG.net.modHashBytes;
+  const head = new Uint8Array(await blob.slice(0, n).arrayBuffer());
+  const tail = blob.size > n ? new Uint8Array(await blob.slice(Math.max(n, blob.size - n)).arrayBuffer()) : new Uint8Array(0);
+  const all = new Uint8Array(head.length + tail.length);
+  all.set(head);
+  all.set(tail, head.length);
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', all));
+  return Array.from(digest, b => b.toString(16).padStart(2, '0')).join('');
+}
+
 /** Human readable error text from a ModError / ZipError / anything. */
 export function describeError(err) {
   if (err instanceof ZipError) err = zipErrorKey(err);
@@ -43,6 +55,7 @@ class ModHost {
     this.events = new Events();
     this.states = new Map();
     this.game = null;
+    this._hashes = new WeakMap();
     this.readyPromise = new Promise(resolve => { this._ready = resolve; });
   }
 
@@ -77,6 +90,21 @@ class ModHost {
     return [...this.states.values()].map(s => ({
       id: s.id, ...s.record.manifest, outdated: isOutdated(s.record.manifest.api), enabled: s.record.enabled, status: s.status, error: s.error ? describeError(s.error) : '',
     }));
+  }
+
+  /**
+   * Fingerprint of the mods that are enabled and running: [{ id, version, size, hash }] sorted by id.
+   * Multiplayer compares it so host and guests run the same mods. hash = SHA-256 of the ZIP's head + tail (cached per ZIP).
+   */
+  async signature() {
+    const out = [];
+    for (const s of this.states.values()) {
+      if (!s.record.enabled || s.status !== 'loaded') continue;
+      const zip = s.record.zip;
+      if (!this._hashes.has(zip)) this._hashes.set(zip, await hashBlob(zip));
+      out.push({ id: s.id, version: s.record.manifest.version, size: zip.size, hash: this._hashes.get(zip) });
+    }
+    return out.sort((a, b) => (a.id < b.id ? -1 : 1));
   }
 
   /** Installs (or updates) a mod from a ZIP File/Blob and loads it. Throws on an invalid ZIP/manifest. */
