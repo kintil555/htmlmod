@@ -8,7 +8,7 @@ import { Prop } from '../entities/Prop.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
 import { toast } from '../ui/ui.js';
 import { Net } from './Net.js';
-import { T, FLAG, round2 } from './protocol.js';
+import { T, FLAG, round2, RateLimiter } from './protocol.js';
 
 const N = CONFIG.net;
 const REGISTRY = { nextbot: NextbotRegistry, prop: PropRegistry };
@@ -30,6 +30,8 @@ export class Sync {
     this._acc = 0;
     this._target = null;
     this._retarget = 0;
+    /** Host: guest id -> { spawn: RateLimiter, clear: RateLimiter }. */
+    this._limits = new Map();
 
     Net.snapshotProvider = () => this.snapshot();
     Net.events.on('players', () => this._syncPlayers());
@@ -58,6 +60,7 @@ export class Sync {
     for (const [id, rp] of [...this.remotes]) {
       if (seen.has(id)) continue;
       this.remotes.delete(id);
+      this._limits.delete(id);
       world.remove(rp);
       if (this.game.state === 'playing' && Net.active) toast(STR.net.left(rp.name));
     }
@@ -71,7 +74,26 @@ export class Sync {
     for (const rp of this.remotes.values()) world?.remove(rp);
     this.remotes.clear();
     this.byNid.clear();
+    this._limits.clear();
     this._target = null;
+  }
+
+  /** Host: a guest's state packet made safe, or null. Everything is finite and inside the map, so a guest cannot park itself (and the nextbots) out of bounds. */
+  _cleanState(s) {
+    if (!Array.isArray(s) || s.length !== 6 || !s.every(Number.isFinite)) return null;
+    const b = this.game.world.bounds;
+    const top = Number.isFinite(b.maxY) ? b.maxY : b.minY + 500;
+    const [x, y, z, yaw, pitch, flags] = s;
+    const m = N.boundsMargin;
+    if (x < b.minX - m || x > b.maxX + m || z < b.minZ - m || z > b.maxZ + m || y < b.minY - m || y > top + m) return null;
+    if (Math.abs(yaw) > 1e4 || Math.abs(pitch) > 4) return null;
+    return [x, y, z, yaw, pitch, flags & (FLAG.ground | FLAG.sprint | FLAG.dead)];
+  }
+
+  _limitsOf(id) {
+    let l = this._limits.get(id);
+    if (!l) this._limits.set(id, l = { spawn: new RateLimiter(N.spawnRate, N.spawnBurst), clear: new RateLimiter(1 / N.clearCooldownSec, 1) });
+    return l;
   }
 
   /* ---------------- state packets ---------------- */
@@ -99,13 +121,14 @@ export class Sync {
 
   _onState(from, msg) {
     if (msg.t === T.STATE && Net.isHost) {
-      this.remotes.get(from)?.setState(msg.s);
+      const clean = this._cleanState(msg.s);
+      if (clean) this.remotes.get(from)?.setState(clean);
     } else if (msg.t === T.SNAP && Net.isGuest) {
-      for (const row of Array.isArray(msg.p) ? msg.p : []) {
+      for (const row of Array.isArray(msg.p) ? msg.p.slice(0, N.maxPlayers) : []) {
         if (!Array.isArray(row) || row[0] === Net.selfId) continue;
         this.remotes.get(row[0])?.setState(row.slice(1));
       }
-      for (const row of Array.isArray(msg.b) ? msg.b : []) {
+      for (const row of Array.isArray(msg.b) ? msg.b.slice(0, CONFIG.limits.maxNextbots) : []) {
         const bot = Array.isArray(row) ? this.byNid.get(row[0]) : null;
         if (bot?.remote && finite(row[1], row[2], row[3])) bot.setTarget(row[1], row[2], row[3]);
       }
@@ -169,7 +192,8 @@ export class Sync {
   }
 
   applySnapshot(snapshot) {
-    for (const s of snapshot?.entities ?? []) this._applySpawn(s);
+    const list = Array.isArray(snapshot?.entities) ? snapshot.entities.slice(0, CONFIG.limits.maxNextbots + CONFIG.limits.maxProps) : [];
+    for (const s of list) this._applySpawn(s);
   }
 
   _entityPos(e) {
@@ -198,7 +222,8 @@ export class Sync {
   /** Guest: build the entity the host announced. */
   _applySpawn(s) {
     const reg = REGISTRY[s?.kind];
-    if (!reg || !finite(s.nid, s.x, s.y, s.z) || typeof s.def !== 'string' || !reg.has(s.def) || this.byNid.has(s.nid)) return;
+    if (!reg || !Number.isInteger(s.nid) || !finite(s.x, s.y, s.z) || typeof s.def !== 'string' || !reg.has(s.def) || this.byNid.has(s.nid)) return;
+    if (this.game.world.count(s.kind) >= (s.kind === 'nextbot' ? CONFIG.limits.maxNextbots : CONFIG.limits.maxProps)) return;
     const def = reg.get(s.def);
     let e;
     if (s.kind === 'nextbot') {
@@ -216,16 +241,21 @@ export class Sync {
   _onMsg(from, msg) {
     const g = this.game;
     if (Net.isHost) {
+      const limits = this._limitsOf(from);
       if (msg.t === T.SPAWN_REQ) {
         const p = { x: msg.x, y: msg.y, z: msg.z };
-        if (!finite(p.x, p.y, p.z) || typeof msg.def !== 'string') return;
+        if (!finite(p.x, p.y, p.z) || typeof msg.def !== 'string' || !limits.spawn.allow()) return;
+        const who = this.remotes.get(from);
+        if (!who || Math.hypot(p.x - who.pos.x, p.y - who.pos.y, p.z - who.pos.z) > N.spawnReach) return;
+        g.world.clamp(p, CONFIG.world.aimMargin);
         if (msg.kind === 'nextbot' && NextbotRegistry.has(msg.def)) g.spawnNextbot(msg.def, p, { quiet: true });
         else if (msg.kind === 'prop' && PropRegistry.has(msg.def)) g.spawnProp(msg.def, p, { quiet: true });
       } else if (msg.t === T.REMOVE_REQ) {
-        const e = this.byNid.get(msg.nid);
+        if (!limits.spawn.allow()) return;
+        const e = Number.isInteger(msg.nid) ? this.byNid.get(msg.nid) : null;
         if (e) g.world.remove(e);
       } else if (msg.t === T.CLEAR_REQ) {
-        g.clearSpawned();
+        if (limits.clear.allow()) g.clearSpawned();
       }
       return;
     }

@@ -2,7 +2,8 @@ import { CONFIG } from '../config.js';
 import { STR } from '../content/strings.js';
 import { Events } from '../core/Events.js';
 import { Mods } from '../mods/Mods.js';
-import { T, encode, decode, cleanName, inviteLink } from './protocol.js';
+import { T, encode, decode, cleanName, inviteLink, RateLimiter } from './protocol.js';
+import { solveCaptcha } from './captcha.js';
 import { diffMods, sameMods } from './modsync.js';
 
 const N = CONFIG.net;
@@ -71,7 +72,7 @@ class NetSession {
   /** Opens a room. Resolves with the invite code. */
   async host(name) {
     this.leave();
-    const hello = await this._openSignal('/host');
+    const hello = await this._openSignal('/host', await this._humanToken());
     this.role = 'host';
     this.selfId = 'host';
     this.code = hello.code;
@@ -87,7 +88,7 @@ class NetSession {
     this.role = 'guest';
     this.code = code;
     try {
-      const hello = await this._openSignal(`/join?code=${encodeURIComponent(code)}`);
+      const hello = await this._openSignal(`/join?code=${encodeURIComponent(code)}`, await this._humanToken());
       this.selfId = hello.id;
       return await new Promise((resolve, reject) => {
         this._joinWait = { resolve, reject };
@@ -97,6 +98,11 @@ class NetSession {
       this.leave();
       throw err;
     }
+  }
+
+  /** "I'm not a robot" token for the signalling server (null when the check is off). Throws NetError('captcha'). */
+  async _humanToken() {
+    try { return await solveCaptcha(); } catch { throw new NetError('captcha'); }
   }
 
   /** Ends the session without emitting 'closed'. */
@@ -149,10 +155,11 @@ class NetSession {
 
   /* ---------------- signalling socket ---------------- */
 
-  _openSignal(path) {
+  _openSignal(path, token = null) {
     return new Promise((resolve, reject) => {
       let ws;
-      try { ws = new WebSocket(`${signalUrl()}${path}`); } catch { reject(new NetError('signal')); return; }
+      const query = token ? `${path.includes('?') ? '&' : '?'}ts=${encodeURIComponent(token)}` : '';
+      try { ws = new WebSocket(`${signalUrl()}${path}${query}`); } catch { reject(new NetError('signal')); return; }
       let settled = false;
       const fail = key => {
         if (settled) return;
@@ -166,7 +173,7 @@ class NetSession {
       ws.onerror = () => fail('signal');
       ws.onclose = () => { if (settled) this._onSignalClose(ws); else fail('signal'); };
       ws.onmessage = ev => {
-        const m = decode(ev.data);
+        const m = decode(ev.data, N.maxHostMsgChars);
         if (!m) return;
         if (settled) { this._onSignal(m); return; }
         if (m.t === 'hello') {
@@ -176,7 +183,7 @@ class NetSession {
           this._ping = setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, N.signalPingMs);
           resolve(m);
         } else if (m.t === 'error') {
-          fail(m.reason === 'no-room' ? 'noRoom' : m.reason === 'full' ? 'roomFull' : 'signal');
+          fail(m.reason === 'no-room' ? 'noRoom' : m.reason === 'full' ? 'roomFull' : m.reason === 'captcha' ? 'captcha' : 'signal');
         }
       };
     });
@@ -214,7 +221,7 @@ class NetSession {
 
   _makePeer(id) {
     const pc = new RTCPeerConnection({ iceServers: N.iceServers });
-    const peer = { id, pc, ctl: null, state: null, joined: false, name: '', helloSeen: false, pendingIce: [], timer: setTimeout(() => this._dropPeer(id), N.connectTimeoutMs) };
+    const peer = { id, pc, ctl: null, state: null, joined: false, name: '', helloSeen: false, pendingIce: [], strikes: 0, ctlLimit: new RateLimiter(N.ctlRate, N.ctlBurst), stateLimit: new RateLimiter(N.stateRate, N.stateBurst), timer: setTimeout(() => this._dropPeer(id), N.connectTimeoutMs) };
     this.peers.set(id, peer);
     pc.onicecandidate = e => { if (e.candidate) this._signal(id, { ice: e.candidate.toJSON() }); };
     pc.onconnectionstatechange = () => {
@@ -227,6 +234,9 @@ class NetSession {
 
   async _offerTo(id) {
     if (this.peers.has(id)) return;
+    let pending = 0;
+    for (const p of this.peers.values()) if (!p.joined) pending++;
+    if (pending >= N.maxPending || this.peers.size >= N.maxPlayers * 2) return;
     const peer = this._makePeer(id);
     this._attachChannel(peer, peer.pc.createDataChannel('ctl'));
     this._attachChannel(peer, peer.pc.createDataChannel('state', { ordered: false, maxRetransmits: 0 }));
@@ -266,7 +276,8 @@ class NetSession {
     } else if (ch.label === 'state') {
       peer.state = ch;
       ch.onmessage = e => {
-        const m = decode(e.data);
+        if (this.isHost && !this._allow(peer, peer.stateLimit)) return;
+        const m = decode(e.data, this.isHost ? N.maxStateMsgChars : N.maxHostMsgChars);
         if (m && peer.joined) this.events.emit('state', { from: peer.id, msg: m });
       };
     }
@@ -279,9 +290,17 @@ class NetSession {
     this._raw(peer, { t: T.HELLO, name: this._name, proto: N.protocol, mods });
   }
 
+  /** Host: spends a token from a guest's bucket. Packets over the rate are dropped; a guest that keeps flooding is kicked. */
+  _allow(peer, limiter) {
+    if (limiter.allow()) return true;
+    if (++peer.strikes > N.maxStrikes) this._dropPeer(peer.id);
+    return false;
+  }
+
   _onCtl(peer, raw) {
-    const m = decode(raw);
-    if (!m) return;
+    if (this.isHost && !this._allow(peer, peer.ctlLimit)) return;
+    const m = decode(raw, this.isHost ? N.maxGuestMsgChars : N.maxHostMsgChars);
+    if (!m) { if (this.isHost) this._allow(peer, peer.ctlLimit); return; }
     if (this.isHost) {
       if (m.t === T.HELLO) { this._onHello(peer, m); return; }
       if (!peer.joined) return;
@@ -291,7 +310,7 @@ class NetSession {
     if (m.t === T.WELCOME) this._onWelcome(peer, m);
     else if (m.t === T.REJECT) this._joinWait?.reject(new NetError(m.reason === 'mods' ? 'mods' : m.reason === 'full' ? 'full' : 'proto', m.detail));
     else if (!peer.joined) return;
-    else if (m.t === T.JOIN && typeof m.id === 'string') { this.players.set(m.id, { id: m.id, name: cleanName(m.name, STR.net.unnamed) }); this.events.emit('players'); }
+    else if (m.t === T.JOIN && typeof m.id === 'string' && m.id.length <= 32 && this.players.size < N.maxPlayers) { this.players.set(m.id, { id: m.id, name: cleanName(m.name, STR.net.unnamed) }); this.events.emit('players'); }
     else if (m.t === T.LEAVE) { this.players.delete(m.id); this.events.emit('players'); }
     else if (m.t === T.START) { this.started = true; this.events.emit('start'); }
     else this.events.emit('msg', { from: peer.id, msg: m });
@@ -327,7 +346,9 @@ class NetSession {
     clearTimeout(peer.timer);
     this.selfId = typeof m.id === 'string' ? m.id : this.selfId;
     this.started = !!m.started;
-    this.players = new Map((Array.isArray(m.players) ? m.players : []).map(p => [p.id, { id: p.id, name: cleanName(p.name, STR.net.unnamed) }]));
+    this.players = new Map((Array.isArray(m.players) ? m.players : []).slice(0, N.maxPlayers)
+      .filter(p => p && typeof p.id === 'string' && p.id.length <= 32)
+      .map(p => [p.id, { id: p.id, name: cleanName(p.name, STR.net.unnamed) }]));
     this._closeSignal();
     const wait = this._joinWait;
     this._joinWait = null;

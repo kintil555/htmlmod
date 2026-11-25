@@ -22,9 +22,9 @@ export const FLAG = { ground: 1, sprint: 2, dead: 4 };
 
 export const encode = msg => JSON.stringify(msg);
 
-/** Parses a message; null for anything that is not a JSON object with a string `t`. */
-export function decode(raw) {
-  if (typeof raw !== 'string') return null;
+/** Parses a message; null for anything over `max` characters or that is not a JSON object with a string `t`. */
+export function decode(raw, max = Infinity) {
+  if (typeof raw !== 'string' || raw.length > max) return null;
   try {
     const m = JSON.parse(raw);
     return m && typeof m === 'object' && typeof m.t === 'string' ? m : null;
@@ -56,4 +56,18 @@ export function inviteLink(code) {
   url.hash = '';
   url.searchParams.set(CONFIG.net.joinParam, code);
   return url.toString();
+}
+
+/** Token bucket: `rate` events per second with bursts up to `burst`. allow() is false when the bucket is empty. */
+export class RateLimiter {
+  constructor(rate, burst) { this.rate = rate; this.burst = burst; this.tokens = burst; this.last = performance.now(); }
+
+  allow() {
+    const now = performance.now();
+    this.tokens = Math.min(this.burst, this.tokens + (now - this.last) * this.rate / 1000);
+    this.last = now;
+    if (this.tokens < 1) return false;
+    this.tokens -= 1;
+    return true;
+  }
 }

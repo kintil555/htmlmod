@@ -15,9 +15,19 @@ Wrangler prints the URL, for example `https://htmlmod-signal.<your-subdomain>.wo
 
 `ALLOWED_ORIGINS` in `wrangler.toml` lists the sites allowed to connect (`localhost` is always allowed; requests without an Origin header are refused). Add your own domain there. A per-IP rate limit (`RATE`, 20 connections per minute) guards against room spam and invite-code guessing.
 
+## Bot protection
+Layers: Origin check, per-IP rate limit, Cloudflare Turnstile, per-socket message flood limit (guests are closed after 120 messages in 10 s).
+
+Turnstile ("I'm not a robot"): create a widget in the Cloudflare dashboard (Turnstile), add your site's domain, then
+
+    cd worker
+    npx wrangler secret put TURNSTILE_SECRET
+
+and put the widget's **site key** in `CONFIG.net.turnstileSiteKey` (`src/config.js`). The worker then refuses every `/host` and `/join` without a valid single-use token (`?ts=`), answering `{ t:'error', reason:'captcha' }`. With no secret set the check is off.
+
 ## Protocol
 - `GET /host` (WebSocket): creates a room. First message `{ t:'hello', id:'host', role:'host', code }`.
-- `GET /join?code=ABC123` (WebSocket): first message `{ t:'hello', id, role:'guest', code }`, or `{ t:'error', reason:'no-room' | 'full' }`.
+- `GET /join?code=ABC123` (WebSocket): first message `{ t:'hello', id, role:'guest', code }`, or `{ t:'error', reason:'no-room' | 'full' | 'captcha' }`.
 - Client sends `{ t:'signal', to, data }`; the server forwards `{ t:'signal', from, data }`. The host also gets `{ t:'peer-join', id }` and `{ t:'peer-left', id }`.
 - `ping` is answered with `pong` (keep-alive). When the host disconnects the room is closed.
 

@@ -30,5 +30,7 @@ Play → Multiplayer → Host gives an invite code and a link (also in the pause
 
 The signalling server (Cloudflare Worker + Durable Object) is in `worker/`: deploy it once (see `worker/README.md`) and set `CONFIG.net.signalUrl`, or open the game with `?signal=wss://your-worker`.
 
+Bot protection: optional Cloudflare Turnstile "I'm not a robot" check before host / join (`CONFIG.net.turnstileSiteKey` + `TURNSTILE_SECRET` on the worker, see `worker/README.md`), per-IP and per-socket rate limits on the worker, and host-side limits on every guest (packet size and rate, spawn rate and reach, state sanity checks, kick on flooding): `CONFIG.net`.
+
 ## Extending
 See `docs/AGENTS.md`.

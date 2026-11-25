@@ -102,6 +102,8 @@ export const STR = {
   },
   touch: { jump: 'Jump', dive: 'Dive', spawn: 'Spawn', remove: 'Remove', pause: 'Pause' },
   net: {
+    captchaTitle: 'Verify you are human',
+    captchaHint: 'Complete the check to continue.',
     singleplayer: 'Singleplayer', multiplayer: 'Multiplayer', host: 'Host', join: 'Join', start: 'Start', leave: 'Leave', copy: 'Copy',
     copied: 'Copied', copyFailed: 'Could not copy',
     playTitle: 'Play', multiTitle: 'Multiplayer', joinTitle: 'Join a game', lobbyHost: 'Hosting', lobbyGuest: 'Lobby', inviteTitle: 'Invite',
@@ -115,6 +117,7 @@ export const STR = {
     startFailed: 'Could not start the game',
     err: {
       signal: 'Cannot reach the game server',
+      captcha: 'Human check failed, try again',
       timeout: 'Connection timed out',
       noRoom: 'No game with that code',
       roomFull: 'The game is full',

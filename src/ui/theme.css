@@ -104,6 +104,8 @@ kbd { display: inline-block; padding: 2px 8px; border: 1px solid var(--c-line); 
 .net__status.is-error { color: var(--c-danger); }
 .net__hint { margin: var(--s2) 0 var(--s3); color: var(--c-dim); line-height: 1.5; }
 .net__title { margin: var(--s3) 0 var(--s2); color: var(--c-accent); letter-spacing: .12em; text-transform: uppercase; font-size: 16px; }
+.captcha { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.72); }
+.captcha__box { display: flex; justify-content: center; min-height: 70px; }
 .net__players { list-style: none; margin: 0; padding: 0; }
 .net__players li { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) 0; border-bottom: 1px solid rgba(255,255,255,.08); letter-spacing: .08em; }
 .net__players li span:first-child { flex: 1; }
