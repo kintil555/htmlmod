@@ -214,7 +214,7 @@ export const CONFIG = {
    * avatar: glTF skinned player model. height = world units head to toe. rig = bone names. gait: stride = distance per full step cycle; angles in radians.
    */
   net: {
-    signalUrl: 'wss://htmlmod-signal.kintil555.workers.dev',
+    signalUrl: 'wss://htmlmod-signal.secret5.workers.dev',
     signalParam: 'signal',
     signalStorage: 'htmlmod.signal',
     joinParam: 'join',
