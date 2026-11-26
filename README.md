@@ -16,6 +16,9 @@ WASD move, Shift sprint, Space jump (sprint at a wall, jump, then tap Space agai
 ## Touch
 Phones and tablets get on-screen controls automatically: a floating stick on the left (push it all the way to sprint), drag on the right to look, round Jump / Dive buttons at the bottom right, Spawn / Remove / Pause at the top right. `?touch=1` forces them on a desktop (for testing), `?touch=0` turns them off. Tunables: `CONFIG.touch`.
 
+## Performance (phones)
+Settings → Graphics: **Quality** (Auto picks Low on touch devices; applies after a reload), **Render scale** (live) and **Lower resolution automatically when slow** (drops the scale step by step while fps stays under 40, never raises it). Low turns off GTAO and sun effects and shrinks shadow maps, mirror and water reflections, and caps the canvas at 1x CSS pixels. Presets: `CONFIG.quality`.
+
 ## Tuning
 Player speed is in `src/config.js` (walk 14, sprint 21, jump 14.5). Nextbot jump/AI tunables are in `CONFIG.nextbot` (pathfinding in `CONFIG.nextbot.nav`; the graph is baked from any map automatically). Nextbot speed/turning/slide are per bot in `src/content/nextbots.js`.
 

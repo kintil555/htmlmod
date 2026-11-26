@@ -3,7 +3,8 @@ export const STR = {
   menu: { play: 'Play', help: 'Help', settings: 'Settings', mods: 'Mods', resume: 'Resume', quit: 'Main Menu', back: 'Back' },
   loading: 'Loading…',
   loadingStage: { assets: 'Loading assets', map: 'Loading map', nav: 'Building navigation', shaders: 'Preparing graphics' },
-  settings: { title: 'Settings', empty: 'No options yet.', graphics: 'Graphics', sunEffects: 'Sun effects (god rays, lens flare, glow)' },
+  settings: { title: 'Settings', empty: 'No options yet.', graphics: 'Graphics', sunEffects: 'Sun effects (god rays, lens flare, glow)',
+    quality: { label: 'Quality (reload to apply)', auto: 'Auto', low: 'Low (phones)', medium: 'Medium', high: 'High', scale: 'Render scale', adaptive: 'Lower resolution automatically when slow', reload: 'Reload the page to apply the new quality' } },
   help: {
     title: 'Help',
     sections: [

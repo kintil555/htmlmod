@@ -38,7 +38,8 @@ export class PostFx {
     aoPass.radius.value = A.radius * CONFIG.player.eyeHeight;
     aoPass.thickness.value = A.thickness;
     aoPass.samples.value = A.samples;
-    const aoFactor = mix(1, aoPass.getTextureNode().sample(screenUV).r, A.strength);
+    // `enabled: false` (low quality) leaves the pass out of the graph, so it is never rendered.
+    const aoFactor = A.enabled === false || !(A.strength > 0) ? float(1) : mix(1, aoPass.getTextureNode().sample(screenUV).r, A.strength);
 
     // God rays: depth-aware march through the shadow map, bilateral blur, edge-aware composite tinted by the sun.
     const G = F.godrays;

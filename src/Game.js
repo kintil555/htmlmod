@@ -9,6 +9,7 @@ import { World } from './world/World.js';
 import { Environment } from './world/Environment.js';
 import { PostFx } from './world/PostFx.js';
 import { Settings } from './core/Settings.js';
+import { Quality } from './core/Quality.js';
 import { events } from './core/Events.js';
 import { loadMapData, buildMap } from './world/MapLoader.js';
 import { Player } from './entities/Player.js';
@@ -56,8 +57,12 @@ export class Game {
     // distance). three.js falls back to the normal depth buffer by itself when the backend cannot do it.
     this.renderer = new WebGPURenderer({ canvas: this.canvas, antialias: false, powerPreference: 'high-performance', reversedDepthBuffer: true });
     await this.renderer.init();
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    Assets.anisotropy = Math.min(8, this.renderer.getMaxAnisotropy());
+    // Merges the preset into CONFIG (shadows, AO, mirrors, water) before the world and post pipeline are built.
+    this.quality = Quality.apply(Settings.get('quality'));
+    /** Extra render scale from the adaptive resolution (1 = none). Only ever goes down. */
+    this.adaptScale = 1;
+    this._adapt = { warm: CONFIG.quality.adaptive.warmupSec, sec: 0, frames: 0 };
+    Assets.anisotropy = Math.min(this.quality.anisotropy, this.renderer.getMaxAnisotropy());
     this.camera = new THREE.PerspectiveCamera(CONFIG.player.fov, 1, 0.1, 600);
     this._resize();
     window.addEventListener('resize', () => this._resize());
@@ -87,7 +92,12 @@ export class Game {
     this.env = new Environment(this.renderer, this.world.scene, this.world.bounds);
     this.fx = new PostFx(this.renderer, this.world.scene, this.camera, this.env.rayLight, this.env.sunDir);
     this.fx.setSunEffects(Settings.get('sunEffects'));
-    Settings.events.on('change', ({ id, value }) => { if (id === 'sunEffects') this.fx.setSunEffects(value); });
+    Settings.events.on('change', ({ id, value }) => {
+      if (id === 'sunEffects') this.fx.setSunEffects(value);
+      else if (id === 'renderScale') this._resize();
+      else if (id === 'adaptiveRes') { this.adaptScale = 1; this._resize(); }
+      else if (id === 'quality') toast(STR.settings.quality.reload);
+    });
     await this._warmUp(progress(STR.loadingStage.shaders, S.nav, 1));
     this.input = new Input();
     this.input.attach();
@@ -441,16 +451,40 @@ export class Game {
   }
 
   /* ---------------- loop ---------------- */
+  /** Canvas pixels per CSS pixel: device ratio capped by the quality preset, times the render scale setting and the adaptive scale. */
+  _pixelRatio() {
+    return Math.max(0.25, Math.min(window.devicePixelRatio, this.quality.pixelRatio) * Settings.get('renderScale') * this.adaptScale);
+  }
+
+  /** Adaptive resolution: if the average fps over a window is below target, render at a lower scale (never back up). */
+  _adaptResolution(rawDt) {
+    const A = CONFIG.quality.adaptive;
+    const s = this._adapt;
+    if (!Settings.get('adaptiveRes') || this.state !== 'playing' || this.paused || this.adaptScale <= A.minScale) return;
+    if (rawDt > 0.25) return; // tab switch or shader hitch, not a real frame time
+    if (s.warm > 0) { s.warm -= rawDt; return; }
+    s.sec += rawDt; s.frames++;
+    if (s.sec < A.windowSec) return;
+    const fps = s.frames / s.sec;
+    s.sec = 0; s.frames = 0;
+    if (fps >= A.targetFps) return;
+    this.adaptScale = Math.max(A.minScale, Math.round((this.adaptScale - A.step) * 100) / 100);
+    this._resize();
+  }
+
   _resize() {
     const w = window.innerWidth; const h = window.innerHeight;
+    this.renderer.setPixelRatio(this._pixelRatio());
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
 
   _frame(t) {
-    const dt = Math.min((t - this.lastT) / 1000, 0.05);
+    const rawDt = (t - this.lastT) / 1000;
+    const dt = Math.min(rawDt, 0.05);
     this.lastT = t;
+    this._adaptResolution(rawDt);
     this._syncTouch();
     if (this.state !== 'playing') return;
     // In a multiplayer session the world keeps running behind the pause menu (the other players are still playing).
