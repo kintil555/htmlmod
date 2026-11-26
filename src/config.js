@@ -208,8 +208,8 @@ export const CONFIG = {
   /**
    * Multiplayer (src/net). WebRTC data channels between the host and each guest; the Cloudflare Worker + Durable Object in worker/ only
    * pairs them up by invite code (signalling). signalUrl: that Worker; override once with ?signal=wss://host (remembered in localStorage).
-   * protocol: bump on any wire change. maxPlayers: host + guests. sendRate: state packets per second. playerSmooth/botSmooth: follow rate of remote players / bots toward the latest packet; teleportDist: jumps farther than this snap.
-   * retargetSec/retargetBias: the host points the nextbots at the nearest living player, re-picked this often; the current target keeps the pick unless another is closer than bias x its distance.
+   * protocol: bump on any wire change. maxPlayers: host + guests. sendRate: state packets per second. playerSmooth: follow rate of remote players toward the latest packet; teleportDist: jumps farther than this snap.
+   * Nextbots are simulated by every client for its own player (the host only announces spawns / removals), on real elapsed time in fixed steps of at most simStep seconds, catching up at most maxCatchup seconds per frame (safety valve against a death spiral on a very slow device).
    * modHashBytes: head + tail of each mod ZIP hashed to prove both sides run the same mod build.
    * avatar: glTF skinned player model. height = world units head to toe. rig = bone names. gait: stride = distance per full step cycle; angles in radians.
    */
@@ -218,7 +218,7 @@ export const CONFIG = {
     signalParam: 'signal',
     signalStorage: 'htmlmod.signal',
     joinParam: 'join',
-    protocol: 1,
+    protocol: 2,
     /** Cloudflare Turnstile site key ("I'm not a robot" before host / join). Empty = check off. The secret goes on the worker (worker/README.md). */
     turnstileSiteKey: '0x4AAAAAAGTyEJTVwaMdXJj1',
     maxPlayers: 8,
@@ -243,17 +243,10 @@ export const CONFIG = {
     sendRate: 20,
     maxBuffered: 65536,
     playerSmooth: 18,
-    botSmooth: 18,
-    /** Host: the world runs on real elapsed time (not the per-frame clamp), in fixed steps of at most hostStep seconds, and catches up at most hostMaxCatchup seconds per frame (safety valve against a death spiral on a very slow host). */
-    hostStep: 1 / 30,
-    hostMaxCatchup: 0.25,
-    /** Guest: remote players / bots glide with real frame time (capped at followMaxDt) and bots are dead-reckoned from the last two snapshots for up to extrapolateMax seconds, so a low-FPS host or guest does not stutter the mirrored world. */
-    followMaxDt: 0.25,
-    extrapolateMax: 0.3,
+    simStep: 1 / 30,
+    maxCatchup: 0.25,
     teleportDist: 8,
     nameMax: 20,
-    retargetSec: 1,
-    retargetBias: 0.8,
     modHashBytes: 8 * 1024 * 1024,
     nameTag: { width: 2.4, height: 0.36, above: 0.35, canvasW: 512, canvasH: 80, font: 52, outline: 8 },
     avatar: {

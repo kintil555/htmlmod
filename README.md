@@ -29,7 +29,7 @@ GM Construct, baked from the Sketchfab model Gm_construct by CHANO (CC BY 4.0, s
 Main menu → Mods: install `.zip` mods (HTML/JS), toggle or remove them, download the SDK and a starter template. Start without mods with `?nomods`. Authoring guide: `sdk/README.md`.
 
 ## Multiplayer
-Play → Multiplayer → Host gives an invite code and a link (also in the pause menu); Join takes the code or the link (`?join=CODE`). Peer to peer over WebRTC, host-authoritative world (nextbots, props). Host and guests must have identical mods enabled. Player model: "MALE 07 (garry's mod) rig" by Tung tung tung sahur, CC BY 4.0 (`assets/players/male07/license.txt`).
+Play → Multiplayer → Host gives an invite code and a link (also in the pause menu); Join takes the code or the link (`?join=CODE`). Peer to peer over WebRTC. The host decides what exists (nextbot / prop spawns and removals); every client runs its own nextbots chasing its own player, so a laggy device never slows anyone else's world. Host and guests must have identical mods enabled. Player model: "MALE 07 (garry's mod) rig" by Tung tung tung sahur, CC BY 4.0 (`assets/players/male07/license.txt`).
 
 The signalling server (Cloudflare Worker + Durable Object) is in `worker/`: deploy it once (see `worker/README.md`) and set `CONFIG.net.signalUrl`, or open the game with `?signal=wss://your-worker`.
 
