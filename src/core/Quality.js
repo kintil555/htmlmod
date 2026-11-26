@@ -28,6 +28,7 @@ export const Quality = {
     merge(L.skyAmbient, p.skyAmbient);
     merge(L.mirror, p.mirror);
     merge(CONFIG.water.reflection, p.waterReflection);
+    CONFIG.render.lite = !!p.lite;
     return p;
   },
 };

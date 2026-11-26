@@ -10,6 +10,7 @@ import { Environment } from './world/Environment.js';
 import { PostFx } from './world/PostFx.js';
 import { Settings } from './core/Settings.js';
 import { Quality } from './core/Quality.js';
+import { PerfStats } from './ui/PerfStats.js';
 import { events } from './core/Events.js';
 import { loadMapData, buildMap } from './world/MapLoader.js';
 import { Player } from './entities/Player.js';
@@ -160,6 +161,7 @@ export class Game {
     Net.events.on('closed', ({ reason }) => { toast(describeNetError(new NetError(reason))); this.quitToMenu(); });
     this._openInviteLink();
 
+    if (new URLSearchParams(location.search).has('perf')) this.perf = new PerfStats(this);
     this._bindInput();
     if (this.touch) this._bindFullscreen();
     this.renderer.setAnimationLoop(t => this._frame(t));
@@ -502,9 +504,11 @@ export class Game {
     this._adaptResolution(rawDt);
     this._syncTouch();
     if (this.state !== 'playing') return;
+    this.perf?.begin();
     // In a multiplayer session the world keeps running behind the pause menu (the other players are still playing).
     if (!this.paused || Net.active) this._update(dt);
     this.fx.render();
+    this.perf?.end(rawDt);
   }
 
   _update(dt) {

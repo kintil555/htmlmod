@@ -296,6 +296,8 @@ export const CONFIG = {
    * lite = the phone render path (see PostFx). adaptive: an optional safety net (off by default), the render scale only ever goes down (never back up, so it cannot oscillate): every `windowSec` seconds below `targetFps`
    * it drops by `step`, to at most `minScale`; `warmupSec` skips shader-compile hitches after start.
    */
+  /** Set from the quality preset at boot (core/Quality.js): lite = the phone render path (Lambert map materials, flat cheap water, no post pipeline). */
+  render: { lite: false },
   quality: {
     autoTouch: 'low',
     autoDesktop: 'high',
@@ -305,7 +307,7 @@ export const CONFIG = {
         lite: true, msaa: true, pixelRatio: 1, anisotropy: 2, sunEffects: false,
         shadow: { cascades: 2, mapSize: 1024, maxFar: 80, radius: 1, rays: { enabled: false } },
         ao: { enabled: false },
-        skyAmbient: { resolution: 1024, taps: 10 },
+        skyAmbient: { taps: 10 },
         mirror: { resolution: 0.35, multisample: 0 },
         waterReflection: { resolution: 0.25 },
       },
@@ -313,7 +315,7 @@ export const CONFIG = {
         lite: false, msaa: false, pixelRatio: 1.5, anisotropy: 4, sunEffects: false,
         shadow: { cascades: 3, mapSize: 2048, maxFar: 140, rays: { mapSize: 1024 } },
         ao: { samples: 8, resolutionScale: 0.35 },
-        skyAmbient: { resolution: 1536, taps: 14 },
+        skyAmbient: { taps: 14 },
         mirror: { resolution: 0.5, multisample: 2 },
         waterReflection: { resolution: 0.4 },
       },

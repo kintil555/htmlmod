@@ -35,6 +35,20 @@ function makeMaterial(m, texture) {
   const L = CONFIG.lighting;
   if (m.water) return Water.material();
   const surface = surfaceFor(m.name);
+  if (CONFIG.render.lite) {
+    // Phone path: diffuse only (no specular / image-based light / clearcoat branches), still shadowed and sky-ambient lit.
+    const lite = new THREE.MeshLambertNodeMaterial({
+      map: texture,
+      color: new THREE.Color().setRGB(m.color[0], m.color[1], m.color[2]),
+      side: THREE.DoubleSide,
+      alphaTest: m.alpha === 'mask' ? 0.5 : 0,
+      polygonOffset: m.decal,
+      polygonOffsetFactor: m.decal ? -2 : 0,
+      polygonOffsetUnits: m.decal ? -2 : 0,
+    });
+    lite.aoNode = SkyAmbient.node;
+    return lite;
+  }
   const material = new THREE.MeshPhysicalNodeMaterial({
     map: texture,
     color: new THREE.Color().setRGB(m.color[0], m.color[1], m.color[2]),
@@ -89,8 +103,10 @@ export function buildMap({ def, meta, buffer }) {
       geo.computeBoundingBox();
       const bb = geo.boundingBox;
       // The quad is replaced by a fine grid so waves and splashes can displace real vertices (see Water.js).
+      // Lite water is flat (the depth texture shapes the shoreline), so one quad is enough.
       const cells = CONFIG.water.waves.meshCell / scale;
-      const grid = new THREE.PlaneGeometry(bb.max.x - bb.min.x, bb.max.z - bb.min.z, Math.ceil((bb.max.x - bb.min.x) / cells), Math.ceil((bb.max.z - bb.min.z) / cells));
+      const lite = CONFIG.render.lite;
+      const grid = new THREE.PlaneGeometry(bb.max.x - bb.min.x, bb.max.z - bb.min.z, lite ? 1 : Math.ceil((bb.max.x - bb.min.x) / cells), lite ? 1 : Math.ceil((bb.max.z - bb.min.z) / cells));
       grid.rotateX(-Math.PI / 2);
       grid.translate((bb.min.x + bb.max.x) / 2, bb.max.y, (bb.min.z + bb.max.z) / 2);
       geo.copy(grid); grid.dispose(); geo.computeBoundingSphere();

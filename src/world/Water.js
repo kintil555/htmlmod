@@ -93,6 +93,32 @@ const bumpAt = u => smoothstep(0, SH.rise, u).mul(float(1).sub(smoothstep(SH.ris
 /** Swash lift: fast uprush onto the bank, slow backwash that draws the waterline below the still level (mirrors Shore.swashLift). */
 const swashAt = (p, d) => swashEnvAt(d).mul(SH.height).mul(bumpAt(swashU(p, d)).mul(1 + SH.draw).sub(SH.draw));
 
+/**
+ * Phone water: a flat translucent surface, no reflection pass, no refraction (framebuffer copy), no vertex displacement or noise.
+ * Colour and opacity come from the baked depth field (clear in the shallows, deeper = darker and more opaque, nothing over land), with a
+ * cheap Fresnel sky tint and a soft shore foam line. From below the surface is the underwater fog colour.
+ */
+function buildLiteMaterial() {
+  const viewY = normalize(cameraPosition.sub(positionWorld)).y;
+  const below = viewY.lessThan(0);
+  const wuv = positionWorld.xz.sub(origin).mul(invSize);
+  const depth = texture(depthTex, wuv).r;
+  const wet = smoothstep(0.0, 0.12, depth);
+  const body = float(1).sub(exp(max(depth, 0).mul(-W.absorb)));
+  const tint = float(1).sub(exp(max(depth, 0).mul(-W.colorDepth)));
+  const bodyColor = lerp(vec3(color(W.color.shallow)), vec3(color(W.color.deep)), tint);
+  const fres = pow(float(1).sub(viewY.abs()), 4).mul(0.6);
+  const sky = vec3(color(L.hemisphere.sky));
+  // Foam line where the water gets shallow, drifting slowly.
+  const foam = float(1).sub(smoothstep(0.02, 0.3, depth)).mul(wet).mul(sin(positionWorld.x.add(positionWorld.z).mul(3).add(tU.mul(1.5))).mul(0.25).add(0.75));
+  const above = lerp(lerp(bodyColor, sky, fres), vec3(color(W.color.foam)), foam.mul(0.8));
+  const opacity = lerp(float(W.minOpacity), float(W.maxOpacity), body).mul(wet);
+  const material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  material.colorNode = vec4(select(below, uniforms.fogColor, above), 1);
+  material.opacityNode = select(below, wet.mul(U.mirrorOpacity), max(opacity, foam.mul(0.7)));
+  return material;
+}
+
 function buildMaterial() {
   const p = positionWorld.xz;
   const toCam = cameraPosition.sub(positionWorld);
@@ -331,7 +357,7 @@ export const Water = {
   pass(cam) { inRefl.value = cam === S.camera ? 0 : 1; },
 
   /** The shared water material (built on first use). */
-  material() { return (S.material ??= buildMaterial()); },
+  material() { return (S.material ??= CONFIG.render.lite ? buildLiteMaterial() : buildMaterial()); },
 
   /**
    * Bakes the depth field from the map's collision and starts the ripple sim. `info` = { minX, maxX, minZ, maxZ, y, scale } in world units (scale = map -> world)
@@ -405,7 +431,8 @@ export const Water = {
       if (e.type === 'nextbot') disturb(e, e.s.x, e.s.z, e.y, e.vy, Math.hypot(e.s.vx, e.s.vz), e.radius, CONFIG.nextbot.bodyHeight, dt);
       else if (e.type === 'player') disturb(e, e.pos.x, e.pos.z, e.pos.y, 0, e.speed, e.radius, CONFIG.player.height, dt);
     }
-    if (S.sim.advance(dt)) {
+    // The ripple field only exists for the shader; the flat lite surface never reads it, so skip the texture upload.
+    if (S.sim.advance(dt) && !CONFIG.render.lite) {
       S.sim.fill(S.data, THREE.DataUtils.toHalfFloat);
       simTex.needsUpdate = true;
     }
