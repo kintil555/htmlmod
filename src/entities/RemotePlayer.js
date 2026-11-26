@@ -84,7 +84,9 @@ export class RemotePlayer extends Entity {
     }
   }
 
-  update(dt, ctx) {
+  update(simDt, ctx) {
+    // Real frame time (guest low FPS) so smoothing, speed and gait stay correct; the world's clamped dt is only the fallback.
+    const dt = ctx.netDt ?? simDt;
     const t = this._target;
     const k = 1 - Math.exp(-N.playerSmooth * dt);
     const px = this.pos.x; const pz = this.pos.z;

@@ -244,6 +244,12 @@ export const CONFIG = {
     maxBuffered: 65536,
     playerSmooth: 18,
     botSmooth: 18,
+    /** Host: the world runs on real elapsed time (not the per-frame clamp), in fixed steps of at most hostStep seconds, and catches up at most hostMaxCatchup seconds per frame (safety valve against a death spiral on a very slow host). */
+    hostStep: 1 / 30,
+    hostMaxCatchup: 0.25,
+    /** Guest: remote players / bots glide with real frame time (capped at followMaxDt) and bots are dead-reckoned from the last two snapshots for up to extrapolateMax seconds, so a low-FPS host or guest does not stutter the mirrored world. */
+    followMaxDt: 0.25,
+    extrapolateMax: 0.3,
     teleportDist: 8,
     nameMax: 20,
     retargetSec: 1,
