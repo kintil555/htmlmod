@@ -17,7 +17,13 @@ import { Water } from './Water.js';
  * All numbers come from CONFIG.lighting.sunFx.
  */
 export class PostFx {
-  constructor(renderer, scene, camera, rayLight, sunDir) {
+  constructor(renderer, scene, camera, rayLight, sunDir, { lite = false } = {}) {
+    /** Lite (phones): no pipeline at all, render() draws the scene directly. Tone mapping comes from the renderer; no AO, FXAA (use MSAA), god rays, glow or underwater tint. */
+    this.lite = lite;
+    this.renderer = renderer;
+    this.scene = scene;
+    this.camera = camera;
+    if (lite) return;
     const L = CONFIG.lighting;
     const F = L.sunFx;
     this.pipeline = new THREE.RenderPipeline(renderer);
@@ -110,9 +116,10 @@ export class PostFx {
   }
 
   setSunEffects(on) {
+    if (this.lite) return;
     this.pipeline.outputNode = on ? this.full : this.plain;
     this.pipeline.needsUpdate = true;
   }
 
-  render() { this.pipeline.render(); }
+  render() { if (this.lite) this.renderer.render(this.scene, this.camera); else this.pipeline.render(); }
 }

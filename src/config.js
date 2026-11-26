@@ -293,7 +293,7 @@ export const CONFIG = {
    * A preset is merged into CONFIG.lighting (shadow, ao, skyAmbient, mirror) and CONFIG.water.reflection before anything is built, so it
    * applies on the next page load. pixelRatio = cap on the canvas resolution (CSS px multiplier), anisotropy = texture filtering cap.
    * Phone GPUs are fill-rate bound, so the biggest wins are the pixel ratio, the extra scene renders (water / mirrors), shadow maps and GTAO.
-   * adaptive: the render scale only ever goes down (never back up, so it cannot oscillate): every `windowSec` seconds below `targetFps`
+   * lite = the phone render path (see PostFx). adaptive: an optional safety net (off by default), the render scale only ever goes down (never back up, so it cannot oscillate): every `windowSec` seconds below `targetFps`
    * it drops by `step`, to at most `minScale`; `warmupSec` skips shader-compile hitches after start.
    */
   quality: {
@@ -301,22 +301,23 @@ export const CONFIG = {
     autoDesktop: 'high',
     presets: {
       low: {
-        pixelRatio: 1, anisotropy: 2, sunEffects: false,
-        shadow: { cascades: 2, mapSize: 1024, maxFar: 80, radius: 1, rays: { mapSize: 256 } },
+        // lite: no post pipeline (no MRT scene pass, GTAO, FXAA, god rays, bloom): the scene is drawn straight to the screen with hardware MSAA.
+        lite: true, msaa: true, pixelRatio: 1, anisotropy: 2, sunEffects: false,
+        shadow: { cascades: 2, mapSize: 1024, maxFar: 80, radius: 1, rays: { enabled: false } },
         ao: { enabled: false },
         skyAmbient: { resolution: 1024, taps: 10 },
         mirror: { resolution: 0.35, multisample: 0 },
         waterReflection: { resolution: 0.25 },
       },
       medium: {
-        pixelRatio: 1.5, anisotropy: 4, sunEffects: false,
+        lite: false, msaa: false, pixelRatio: 1.5, anisotropy: 4, sunEffects: false,
         shadow: { cascades: 3, mapSize: 2048, maxFar: 140, rays: { mapSize: 1024 } },
         ao: { samples: 8, resolutionScale: 0.35 },
         skyAmbient: { resolution: 1536, taps: 14 },
         mirror: { resolution: 0.5, multisample: 2 },
         waterReflection: { resolution: 0.4 },
       },
-      high: { pixelRatio: 2, anisotropy: 8, sunEffects: true },
+      high: { lite: false, msaa: false, pixelRatio: 2, anisotropy: 8, sunEffects: true },
     },
     adaptive: { minScale: 0.5, step: 0.1, targetFps: 40, windowSec: 2, warmupSec: 3 },
   },

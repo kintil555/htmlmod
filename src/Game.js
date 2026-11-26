@@ -55,10 +55,10 @@ export class Game {
     // WebGPU, with three.js' automatic WebGL2 fallback. Antialiasing is FXAA in PostFx, not MSAA.
     // Reversed float depth: near-constant precision over the whole 0.1..600 range (no z-fighting or shadow/AO leaks at
     // distance). three.js falls back to the normal depth buffer by itself when the backend cannot do it.
-    this.renderer = new WebGPURenderer({ canvas: this.canvas, antialias: false, powerPreference: 'high-performance', reversedDepthBuffer: true });
-    await this.renderer.init();
-    // Merges the preset into CONFIG (shadows, AO, mirrors, water) before the world and post pipeline are built.
+    // Merges the quality preset into CONFIG (shadows, AO, mirrors, water) before anything is built. Lite (phones) uses MSAA instead of FXAA.
     this.quality = Quality.apply(Settings.get('quality'));
+    this.renderer = new WebGPURenderer({ canvas: this.canvas, antialias: this.quality.msaa, powerPreference: 'high-performance', reversedDepthBuffer: true });
+    await this.renderer.init();
     /** Extra render scale from the adaptive resolution (1 = none). Only ever goes down. */
     this.adaptScale = 1;
     this._adapt = { warm: CONFIG.quality.adaptive.warmupSec, sec: 0, frames: 0 };
@@ -90,7 +90,7 @@ export class Game {
     this.world = new World(buildMap(mapData));
     await this.world.buildNav(progress(STR.loadingStage.nav, S.map, S.nav));
     this.env = new Environment(this.renderer, this.world.scene, this.world.bounds);
-    this.fx = new PostFx(this.renderer, this.world.scene, this.camera, this.env.rayLight, this.env.sunDir);
+    this.fx = new PostFx(this.renderer, this.world.scene, this.camera, this.env.rayLight, this.env.sunDir, { lite: this.quality.lite });
     this.fx.setSunEffects(Settings.get('sunEffects'));
     Settings.events.on('change', ({ id, value }) => {
       if (id === 'sunEffects') this.fx.setSunEffects(value);
@@ -161,6 +161,7 @@ export class Game {
     this._openInviteLink();
 
     this._bindInput();
+    if (this.touch) this._bindFullscreen();
     this.renderer.setAnimationLoop(t => this._frame(t));
   }
 
@@ -226,6 +227,7 @@ export class Game {
 
   resume() {
     this.paused = false;
+    if (this.touch) this._enterFullscreen();
     this.screens.setBackdrop('none');
     this.screens.hideAll();
     this._lock();
@@ -319,6 +321,19 @@ export class Game {
       this._menuClosedAt = performance.now();
       if (this.state === 'playing' && !this.paused && !this.uiOpen) this._lock();
     };
+  }
+
+  /**
+   * Touch: the browser can leave full screen on its own (system back gesture, a native dropdown like the quality list, a rotation).
+   * The next tap while playing brings it back (it needs a user gesture), and the canvas is refitted whenever the size changes.
+   */
+  _bindFullscreen() {
+    const refit = () => requestAnimationFrame(() => this._resize());
+    document.addEventListener('fullscreenchange', refit);
+    window.addEventListener('orientationchange', refit);
+    document.addEventListener('pointerup', () => {
+      if (this.state === 'playing' && !this.paused && !document.fullscreenElement) this._enterFullscreen();
+    }, { passive: true });
   }
 
   /** Touch: full screen + landscape where the browser allows it (needs the tap that started the game; failures are ignored). */

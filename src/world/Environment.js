@@ -91,6 +91,8 @@ export class Environment {
 
     // God rays march through one plain shadow map (they cannot read cascades): an invisible second sun (intensity 0)
     // whose static window covers the whole map at low resolution.
+    // Lite quality has no god rays: no second shadow map either.
+    if (S.rays.enabled === false) { this.rayLight = null; return sun; }
     const R = S.rays;
     const ray = new THREE.DirectionalLight(0xffffff, 0);
     const extent = size / 2;
