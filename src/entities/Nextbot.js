@@ -137,16 +137,31 @@ export class Nextbot extends Entity {
   /** Guest: latest position from the host. */
   setTarget(x, y, z) {
     if (!this._net) { this.s.x = x; this.s.z = z; this.y = y; this.visY = y; }
-    this._net = { x, y, z };
+    const now = performance.now();
+    const prev = this._net;
+    let vx = 0; let vz = 0;
+    if (prev) {
+      const el = (now - prev.t) / 1000;
+      const jump = Math.hypot(x - prev.x, z - prev.z);
+      // Horizontal velocity from the last two snapshots (blended to damp network jitter); a teleport resets it.
+      if (el > 0.005 && el < 1 && jump <= CONFIG.net.teleportDist) {
+        vx = prev.vx * 0.5 + ((x - prev.x) / el) * 0.5;
+        vz = prev.vz * 0.5 + ((z - prev.z) / el) * 0.5;
+      }
+    }
+    this._net = { x, y, z, vx, vz, t: now };
   }
 
-  /** Guest: glide toward the host's position instead of simulating. */
+  /** Guest: glide toward the host's position (dead-reckoned a little past the last snapshot) instead of simulating. */
   _followHost(dt, camera) {
     const s = this.s; const t = this._net;
     if (t) {
-      const k = 1 - Math.exp(-CONFIG.net.botSmooth * dt);
-      if (Math.hypot(t.x - s.x, t.z - s.z) > CONFIG.net.teleportDist || Math.abs(t.y - this.y) > CONFIG.net.teleportDist) { s.x = t.x; s.z = t.z; this.y = t.y; } else {
-        s.x += (t.x - s.x) * k; s.z += (t.z - s.z) * k; this.y += (t.y - this.y) * k;
+      const N = CONFIG.net;
+      const age = Math.min((performance.now() - t.t) / 1000, N.extrapolateMax);
+      const tx = t.x + t.vx * age; const tz = t.z + t.vz * age;
+      const k = 1 - Math.exp(-N.botSmooth * dt);
+      if (Math.hypot(tx - s.x, tz - s.z) > N.teleportDist || Math.abs(t.y - this.y) > N.teleportDist) { s.x = tx; s.z = tz; this.y = t.y; } else {
+        s.x += (tx - s.x) * k; s.z += (tz - s.z) * k; this.y += (t.y - this.y) * k;
       }
     }
     this.visY = this.y;
@@ -168,7 +183,7 @@ export class Nextbot extends Entity {
     const { camera } = ctx;
     const player = ctx.target ?? ctx.player;
     const s = this.s;
-    if (this.remote) { this._followHost(dt, camera); return; }
+    if (this.remote) { this._followHost(ctx.netDt ?? dt, camera); return; }
     if (player.frozen) {
       const k = Math.exp(-2.5 * dt);
       s.vx *= k; s.vz *= k;

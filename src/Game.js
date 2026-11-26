@@ -506,16 +506,36 @@ export class Game {
     if (this.state !== 'playing') return;
     this.perf?.begin();
     // In a multiplayer session the world keeps running behind the pause menu (the other players are still playing).
-    if (!this.paused || Net.active) this._update(dt);
+    if (!this.paused || Net.active) this._update(dt, rawDt);
     this.fx.render();
     this.perf?.end(rawDt);
   }
 
-  _update(dt) {
+  /**
+   * Advances the world. Local player and UI keep the clamped `dt`. The multiplayer host runs the world (nextbots) on real
+   * elapsed time in fixed substeps, so a low-FPS host does not slow the world down for everyone. Guests only mirror the host,
+   * but their smoothing gets the real frame time (`ctx.netDt`) so it stays correct when the guest itself runs at a low FPS.
+   */
+  _stepWorld(dt, rawDt) {
+    const N = CONFIG.net;
+    const ctx = { player: this.player, target: this.sync.chaseTarget(dt), camera: this.camera, chase: !Net.isGuest, netDt: dt };
+    if (Net.isHost) {
+      const total = Math.min(Math.max(rawDt, 0), N.hostMaxCatchup);
+      const steps = Math.max(1, Math.ceil(total / N.hostStep));
+      const h = total / steps;
+      ctx.netDt = h;
+      for (let i = 0; i < steps; i++) this.world.update(h, ctx);
+      return;
+    }
+    if (Net.isGuest) ctx.netDt = Math.min(Math.max(rawDt, 0), N.followMaxDt);
+    this.world.update(dt, ctx);
+  }
+
+  _update(dt, rawDt = dt) {
     const cfg = CONFIG.catchState;
     const live = !this.paused;
     if (live) this.player.update(dt, this.input, this.world);
-    this.world.update(dt, { player: this.player, target: this.sync.chaseTarget(dt), camera: this.camera, chase: !Net.isGuest });
+    this._stepWorld(dt, rawDt);
     this.sync.update(dt);
     this._voidCheck();
     events.emit('game:update', dt);
