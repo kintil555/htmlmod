@@ -36,7 +36,7 @@ export const STR = {
         'Play, Multiplayer, Host: you get an invite code and a link. Send either to a friend.',
         'Play, Multiplayer, Join: type the code or paste the link.',
         'Everyone must have the same mods installed and enabled (same versions). The host refuses players whose mods differ.',
-        'The host runs the nextbots. They chase the living player closest to them. Spawns and removals are shared.',
+        'Every player runs their own nextbots, and they chase you. Spawns and removals are shared, so everyone sees the same ones.',
         'The invite code is also in the pause menu (Esc).',
       ] },
       { title: 'Dodging nextbots', lines: [

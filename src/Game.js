@@ -512,22 +512,21 @@ export class Game {
   }
 
   /**
-   * Advances the world. Local player and UI keep the clamped `dt`. The multiplayer host runs the world (nextbots) on real
-   * elapsed time in fixed substeps, so a low-FPS host does not slow the world down for everyone. Guests only mirror the host,
-   * but their smoothing gets the real frame time (`ctx.netDt`) so it stays correct when the guest itself runs at a low FPS.
+   * Advances the world. Local player and UI keep the clamped `dt`. In a multiplayer session every client runs its own nextbots
+   * (chasing its own player) on real elapsed time in fixed substeps, so nextbots move at the same speed on every device and
+   * a low-FPS player only gets choppy visuals, never a slower world.
    */
   _stepWorld(dt, rawDt) {
     const N = CONFIG.net;
-    const ctx = { player: this.player, target: this.sync.chaseTarget(dt), camera: this.camera, chase: !Net.isGuest, netDt: dt };
-    if (Net.isHost) {
-      const total = Math.min(Math.max(rawDt, 0), N.hostMaxCatchup);
-      const steps = Math.max(1, Math.ceil(total / N.hostStep));
+    const ctx = { player: this.player, target: this.sync.chaseTarget(), camera: this.camera, netDt: dt };
+    if (Net.active) {
+      const total = Math.min(Math.max(rawDt, 0), N.maxCatchup);
+      const steps = Math.max(1, Math.ceil(total / N.simStep));
       const h = total / steps;
       ctx.netDt = h;
       for (let i = 0; i < steps; i++) this.world.update(h, ctx);
       return;
     }
-    if (Net.isGuest) ctx.netDt = Math.min(Math.max(rawDt, 0), N.followMaxDt);
     this.world.update(dt, ctx);
   }
 

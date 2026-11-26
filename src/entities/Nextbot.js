@@ -35,9 +35,6 @@ export class Nextbot extends Entity {
     this.def = def;
     this.displayName = def.name;
     this.height = def.height;
-    /** Multiplayer guest copy: no AI, follows the host's snapshots (setTarget). */
-    this.remote = false;
-    this._net = null;
     const img = texture.image;
     const width = def.height * (img.width / img.height);
     this.radius = Math.min(1.1, Math.max(0.55, width * 0.28));
@@ -134,43 +131,6 @@ export class Nextbot extends Entity {
     if (Math.hypot(this.wp.x - s.x, this.wp.z - s.z) <= reach) this._jump();
   }
 
-  /** Guest: latest position from the host. */
-  setTarget(x, y, z) {
-    if (!this._net) { this.s.x = x; this.s.z = z; this.y = y; this.visY = y; }
-    const now = performance.now();
-    const prev = this._net;
-    let vx = 0; let vz = 0;
-    if (prev) {
-      const el = (now - prev.t) / 1000;
-      const jump = Math.hypot(x - prev.x, z - prev.z);
-      // Horizontal velocity from the last two snapshots (blended to damp network jitter); a teleport resets it.
-      if (el > 0.005 && el < 1 && jump <= CONFIG.net.teleportDist) {
-        vx = prev.vx * 0.5 + ((x - prev.x) / el) * 0.5;
-        vz = prev.vz * 0.5 + ((z - prev.z) / el) * 0.5;
-      }
-    }
-    this._net = { x, y, z, vx, vz, t: now };
-  }
-
-  /** Guest: glide toward the host's position (dead-reckoned a little past the last snapshot) instead of simulating. */
-  _followHost(dt, camera) {
-    const s = this.s; const t = this._net;
-    if (t) {
-      const N = CONFIG.net;
-      const age = Math.min((performance.now() - t.t) / 1000, N.extrapolateMax);
-      const tx = t.x + t.vx * age; const tz = t.z + t.vz * age;
-      const k = 1 - Math.exp(-N.botSmooth * dt);
-      if (Math.hypot(tx - s.x, tz - s.z) > N.teleportDist || Math.abs(t.y - this.y) > N.teleportDist) { s.x = tx; s.z = tz; this.y = t.y; } else {
-        s.x += (tx - s.x) * k; s.z += (tz - s.z) * k; this.y += (t.y - this.y) * k;
-      }
-    }
-    this.visY = this.y;
-    const ground = this.world.collision.groundHeight(s.x, s.z, this.radius, this.y, CONFIG.nextbot.stepHeight);
-    this.shadow.position.y = ground - this.visY + 0.03;
-    this.object3d.position.set(s.x, this.visY, s.z);
-    this._faceCamera(camera);
-  }
-
   /** Billboard: yaw and pitch toward the camera (upright, no roll). */
   _faceCamera(camera) {
     const s = this.s;
@@ -183,7 +143,6 @@ export class Nextbot extends Entity {
     const { camera } = ctx;
     const player = ctx.target ?? ctx.player;
     const s = this.s;
-    if (this.remote) { this._followHost(ctx.netDt ?? dt, camera); return; }
     if (player.frozen) {
       const k = Math.exp(-2.5 * dt);
       s.vx *= k; s.vz *= k;

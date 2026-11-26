@@ -15,9 +15,10 @@ const REGISTRY = { nextbot: NextbotRegistry, prop: PropRegistry };
 const finite = (...v) => v.every(Number.isFinite);
 
 /**
- * Game-side replication. The host owns the world: it runs the nextbots, accepts spawn / remove requests from guests and
- * announces every nextbot / prop it gets ("spawned" / "removed", each with a net id, `nid`). Guests mirror that: remote
- * nextbots are driven by snapshots, remote props are plain props. Every client owns its own player and sends its state.
+ * Game-side replication. The host owns what exists: it accepts spawn / remove requests from guests and announces every
+ * nextbot / prop it gets ("spawned" / "removed", each with a net id, `nid`). Every client builds those entities and runs
+ * the nextbot AI itself, chasing its own player, so one slow device never slows another one's world. Every client owns
+ * its own player and sends its state.
  */
 export class Sync {
   constructor(game) {
@@ -28,8 +29,6 @@ export class Sync {
     this.byNid = new Map();
     this.nextNid = 1;
     this._acc = 0;
-    this._target = null;
-    this._retarget = 0;
     /** Host: guest id -> { spawn: RateLimiter, clear: RateLimiter }. */
     this._limits = new Map();
 
@@ -64,7 +63,6 @@ export class Sync {
       world.remove(rp);
       if (this.game.state === 'playing' && Net.active) toast(STR.net.left(rp.name));
     }
-    if (this._target && !this.remotes.has(this._target.id) && this._target !== this.game.player) this._target = null;
     this.game.refreshPlayers?.();
   }
 
@@ -75,7 +73,6 @@ export class Sync {
     this.remotes.clear();
     this.byNid.clear();
     this._limits.clear();
-    this._target = null;
   }
 
   /** Host: a guest's state packet made safe, or null. Everything is finite and inside the map, so a guest cannot park itself (and the nextbots) out of bounds. */
@@ -114,9 +111,7 @@ export class Sync {
     if (Net.isGuest) { Net.sendState({ t: T.STATE, s: this._localState() }); return; }
     const p = [[Net.selfId, ...this._localState()]];
     for (const [id, rp] of this.remotes) if (rp.raw) p.push([id, ...rp.raw]);
-    const b = [];
-    for (const e of this.byNid.values()) if (e.type === 'nextbot') b.push([e.nid, round2(e.s.x), round2(e.y), round2(e.s.z)]);
-    Net.sendState({ t: T.SNAP, p, b });
+    Net.sendState({ t: T.SNAP, p });
   }
 
   _onState(from, msg) {
@@ -128,47 +123,13 @@ export class Sync {
         if (!Array.isArray(row) || row[0] === Net.selfId) continue;
         this.remotes.get(row[0])?.setState(row.slice(1));
       }
-      for (const row of Array.isArray(msg.b) ? msg.b.slice(0, CONFIG.limits.maxNextbots) : []) {
-        const bot = Array.isArray(row) ? this.byNid.get(row[0]) : null;
-        if (bot?.remote && finite(row[1], row[2], row[3])) bot.setTarget(row[1], row[2], row[3]);
-      }
     }
   }
 
-  /* ---------------- nextbot target (host) ---------------- */
+  /* ---------------- nextbot target ---------------- */
 
-  /**
-   * Who the nextbots chase this frame: on the host, the living player (local or remote) nearest to the pack, kept for
-   * CONFIG.net.retargetSec unless they die. Anywhere else the local player.
-   */
-  chaseTarget(dt) {
-    const me = this.game.player;
-    if (!Net.isHost || !this.remotes.size) return me;
-    this._retarget -= dt;
-    if (this._retarget <= 0 || !this._target || this._target.frozen) {
-      this._retarget = N.retargetSec;
-      this._target = this._pickTarget(me);
-    }
-    return this._target;
-  }
-
-  _pickTarget(me) {
-    const bots = this.game.world.ofType('nextbot');
-    let cx = me.pos.x; let cz = me.pos.z;
-    if (bots.length) {
-      cx = 0; cz = 0;
-      for (const b of bots) { cx += b.s.x; cz += b.s.z; }
-      cx /= bots.length; cz /= bots.length;
-    }
-    let best = me; let bestD = Infinity;
-    for (const c of [me, ...this.remotes.values()]) {
-      if (c.frozen) continue;
-      let d = Math.hypot(c.pos.x - cx, c.pos.z - cz);
-      if (c === this._target) d *= N.retargetBias;
-      if (d < bestD) { best = c; bestD = d; }
-    }
-    return best;
-  }
+  /** Who this client's nextbots chase: always the local player (every client runs its own nextbots). */
+  chaseTarget() { return this.game.player; }
 
   /* ---------------- spawning / removal ---------------- */
 
@@ -201,7 +162,7 @@ export class Sync {
   }
 
   _replicable(e) {
-    return (e.type === 'nextbot' || e.type === 'prop') && typeof e.def?.id === 'string' && !e.remote;
+    return (e.type === 'nextbot' || e.type === 'prop') && typeof e.def?.id === 'string';
   }
 
   /** Host: every nextbot / prop that enters the world (spawn tool, a mod, ...) gets a net id and is announced. */
@@ -228,7 +189,6 @@ export class Sync {
     let e;
     if (s.kind === 'nextbot') {
       e = new Nextbot(def, Assets.get(def.texture), s.x, s.z, this.game.player.pos, s.y);
-      e.remote = true;
     } else {
       e = new Prop(def, s.x, s.z, s.y);
     }
