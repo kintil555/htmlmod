@@ -220,7 +220,7 @@ export const CONFIG = {
     joinParam: 'join',
     protocol: 1,
     /** Cloudflare Turnstile site key ("I'm not a robot" before host / join). Empty = check off. The secret goes on the worker (worker/README.md). */
-    turnstileSiteKey: '',
+    turnstileSiteKey: '0x4AAAAAAGTyEJTVwaMdXJj1',
     maxPlayers: 8,
     /** Abuse limits, enforced by the host per guest. Rates are per second; a peer is dropped after maxStrikes refused packets. */
     maxPending: 4,
